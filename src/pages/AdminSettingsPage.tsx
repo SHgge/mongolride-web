@@ -1,3 +1,5 @@
+import Settings from '../components/admin/Settings';
+
 export default function AdminSettingsPage() {
-  return <div>AdminSettingsPage</div>;
+  return <Settings />;
 }

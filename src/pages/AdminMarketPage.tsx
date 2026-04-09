@@ -1,3 +1,5 @@
+import MarketManagement from '../components/admin/MarketManagement';
+
 export default function AdminMarketPage() {
-  return <div>AdminMarketPage</div>;
+  return <MarketManagement />;
 }

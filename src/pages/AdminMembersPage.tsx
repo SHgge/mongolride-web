@@ -1,3 +1,5 @@
+import MemberManagement from '../components/admin/MemberManagement';
+
 export default function AdminMembersPage() {
-  return <div>AdminMembersPage</div>;
+  return <MemberManagement />;
 }
