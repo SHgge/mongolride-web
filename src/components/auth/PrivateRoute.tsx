@@ -3,9 +3,10 @@ import { useAuth } from '../../hooks/useAuth';
 import { Loader } from '../common';
 
 export default function PrivateRoute() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, profile } = useAuth();
 
-  if (isLoading) {
+  // Loading эсвэл profile ачаалагдаж байгаа үед хүлээх
+  if (isLoading || (isAuthenticated && !profile)) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <Loader />

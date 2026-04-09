@@ -3,12 +3,13 @@ import { useAuth } from '../../hooks/useAuth';
 import { Loader } from '../common';
 
 export default function AdminRoute() {
-  const { isAuthenticated, isAdmin, isLoading } = useAuth();
+  const { isAuthenticated, isAdmin, isLoading, profile } = useAuth();
 
-  if (isLoading) {
+  // Loading эсвэл profile ачаалагдаж байгаа үед хүлээх
+  if (isLoading || (isAuthenticated && !profile)) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader />
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader size="lg" />
       </div>
     );
   }
