@@ -1,3 +1,157 @@
+@import 'leaflet/dist/leaflet.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  /* Light mode (default) */
+  :root {
+    --color-bg: 255 255 255;
+    --color-bg-secondary: 249 250 251;
+    --color-bg-card: 255 255 255;
+    --color-text: 17 24 39;
+    --color-text-secondary: 107 114 128;
+    --color-text-muted: 156 163 175;
+    --color-border: 243 244 246;
+    --color-border-hover: 229 231 235;
+  }
+
+  /* Dark mode */
+  .dark {
+    --color-bg: 17 24 28;
+    --color-bg-secondary: 24 32 37;
+    --color-bg-card: 30 40 46;
+    --color-text: 243 244 246;
+    --color-text-secondary: 156 163 175;
+    --color-text-muted: 107 114 128;
+    --color-border: 55 65 72;
+    --color-border-hover: 75 85 92;
+  }
+
+  /* Dark mode global overrides */
+  .dark body {
+    @apply bg-gray-900 text-gray-100;
+  }
+
+  .dark nav {
+    @apply bg-gray-800/95 border-gray-700;
+  }
+
+  .dark footer {
+    @apply bg-gray-950;
+  }
+
+  /* Cards, panels, white backgrounds */
+  .dark .bg-white {
+    background-color: rgb(30 40 46) !important;
+    color: rgb(229 231 235);
+  }
+
+  .dark .bg-gray-50 {
+    background-color: rgb(24 32 37) !important;
+  }
+
+  .dark .bg-gray-100 {
+    background-color: rgb(30 40 46) !important;
+  }
+
+  /* Text colors */
+  .dark .text-gray-900 {
+    color: rgb(243 244 246) !important;
+  }
+
+  .dark .text-gray-800 {
+    color: rgb(229 231 235) !important;
+  }
+
+  .dark .text-gray-700 {
+    color: rgb(209 213 219) !important;
+  }
+
+  .dark .text-gray-600 {
+    color: rgb(156 163 175) !important;
+  }
+
+  .dark .text-gray-500 {
+    color: rgb(107 114 128) !important;
+  }
+
+  /* Borders */
+  .dark .border-gray-100 {
+    border-color: rgb(55 65 72) !important;
+  }
+
+  .dark .border-gray-200 {
+    border-color: rgb(55 65 72) !important;
+  }
+
+  .dark .border-gray-50 {
+    border-color: rgb(45 55 62) !important;
+  }
+
+  /* Inputs */
+  .dark input,
+  .dark textarea,
+  .dark select {
+    @apply bg-gray-800 border-gray-600 text-gray-100 placeholder-gray-500;
+  }
+
+  .dark input:focus,
+  .dark textarea:focus,
+  .dark select:focus {
+    @apply border-primary-500 ring-primary-500/20;
+  }
+
+  /* Tables */
+  .dark th {
+    @apply bg-gray-800 text-gray-400;
+  }
+
+  .dark tr {
+    @apply border-gray-700;
+  }
+
+  .dark tr:hover {
+    background-color: rgb(24 32 37) !important;
+  }
+
+  /* Hover states */
+  .dark .hover\:bg-gray-50:hover {
+    background-color: rgb(24 32 37) !important;
+  }
+
+  .dark .hover\:bg-gray-100:hover {
+    background-color: rgb(30 40 46) !important;
+  }
+
+  /* Shadow adjustments */
+  .dark .shadow-sm,
+  .dark .shadow-lg {
+    --tw-shadow-color: rgba(0, 0, 0, 0.3);
+  }
+
+  /* Dropdowns / Modals */
+  .dark .bg-white.rounded-xl,
+  .dark .bg-white.rounded-2xl {
+    background-color: rgb(30 40 46) !important;
+    border-color: rgb(55 65 72) !important;
+  }
+
+  /* Skeleton loading */
+  .dark .animate-pulse {
+    background-color: rgb(45 55 62) !important;
+  }
+
+  /* Scrollbar */
+  .dark ::-webkit-scrollbar-track {
+    background: rgb(17 24 28);
+  }
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgb(55 65 72);
+    border-radius: 9999px;
+  }
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgb(75 85 92);
+  }
+}

@@ -122,6 +122,8 @@ export interface Database {
           images?: string[];
           status?: RouteStatus;
           created_by?: string | null;
+          avg_rating?: number;
+          rating_count?: number;
         };
         Relationships: [];
       };

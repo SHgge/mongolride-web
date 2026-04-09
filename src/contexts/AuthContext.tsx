@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import toast from 'react-hot-toast';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 import type { Profile } from '../types/user.types';
@@ -36,124 +37,147 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const user = session?.user ?? null;
   const role = profile?.role ?? null;
 
-  // Profile-г Supabase-ээс авах
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single();
+    try {
+      const { data, error: err } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
 
-    if (profileError) {
-      console.error('Profile fetch error:', profileError.message);
+      if (err) {
+        console.error('Profile fetch error:', err.message);
+        setProfile(null);
+      } else {
+        setProfile(data);
+      }
+    } catch {
       setProfile(null);
-      return;
     }
-
-    setProfile(data);
   }, []);
 
-  // Profile дахин ачааллах (гаднаас дуудах)
   const refreshProfile = useCallback(async () => {
-    if (user) {
-      await fetchProfile(user.id);
-    }
+    if (user) await fetchProfile(user.id);
   }, [user, fetchProfile]);
 
-  // Auth state listener
   useEffect(() => {
-    // Анх session авах
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      if (currentSession?.user) {
-        fetchProfile(currentSession.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
+    let mounted = true;
 
-    // Auth state өөрчлөгдөхөд listener
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, newSession) => {
-      setSession(newSession);
+    const init = async () => {
+      try {
+        const { data: { session: s }, error: sessionErr } = await supabase.auth.getSession();
 
-      if (event === 'SIGNED_IN' && newSession?.user) {
-        await fetchProfile(newSession.user.id);
-      } else if (event === 'SIGNED_OUT') {
+        if (!mounted) return;
+
+        if (sessionErr || !s) {
+          // Session байхгүй эсвэл алдаатай → guest
+          setSession(null);
+          setProfile(null);
+          setLoading(false);
+          return;
+        }
+
+        // Session-ийн хүчинтэй эсэхийг шалгах (timeout 5 секунд)
+        const userPromise = supabase.auth.getUser();
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Session check timeout')), 5000)
+        );
+
+        let currentUser;
+        try {
+          const { data, error: userErr } = await Promise.race([userPromise, timeoutPromise]);
+          if (userErr || !data?.user) throw new Error('Invalid session');
+          currentUser = data.user;
+        } catch {
+          // Token хүчингүй эсвэл timeout → session цэвэрлэж guest болох
+          console.warn('Invalid/expired session, clearing...');
+          try { await supabase.auth.signOut(); } catch { /* ignore */ }
+          setSession(null);
+          setProfile(null);
+          // localStorage-д үлдсэн session устгах
+          Object.keys(localStorage).forEach((key) => {
+            if (key.startsWith('sb-')) localStorage.removeItem(key);
+          });
+          setLoading(false);
+          return;
+        }
+
+        if (!mounted) return;
+
+        // Хүчинтэй session
+        setSession(s);
+        await fetchProfile(currentUser.id);
+      } catch {
+        setSession(null);
         setProfile(null);
+      } finally {
+        if (mounted) setLoading(false);
       }
-    });
+    };
 
-    return () => subscription.unsubscribe();
+    init();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, newSession) => {
+        if (!mounted) return;
+
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          setSession(newSession);
+          await fetchProfile(newSession.user.id);
+        } else if (event === 'SIGNED_OUT') {
+          setSession(null);
+          setProfile(null);
+        } else if (event === 'TOKEN_REFRESHED' && newSession) {
+          setSession(newSession);
+        }
+      },
+    );
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
   }, [fetchProfile]);
 
-  // Бүртгүүлэх
   const signUp = useCallback(
     async (email: string, password: string, fullName: string) => {
       setError(null);
-
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { error: e } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: { full_name: fullName },
-        },
+        options: { data: { full_name: fullName } },
       });
-
-      if (signUpError) {
-        const msg = signUpError.message;
-        setError(msg);
-        return { error: msg };
-      }
-
+      if (e) { setError(e.message); return { error: e.message }; }
       return { error: null };
     },
     [],
   );
 
-  // Нэвтрэх
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null);
-
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (signInError) {
-      const msg = signInError.message;
-      setError(msg);
-      return { error: msg };
-    }
-
+    const { error: e } = await supabase.auth.signInWithPassword({ email, password });
+    if (e) { setError(e.message); return { error: e.message }; }
     return { error: null };
   }, []);
 
-  // Гарах
   const signOut = useCallback(async () => {
     setError(null);
-    const { error: signOutError } = await supabase.auth.signOut();
-    if (signOutError) {
-      setError(signOutError.message);
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      // signOut алдаа гарсан ч state цэвэрлэх
     }
     setProfile(null);
     setSession(null);
+    toast.success('Системээс гарлаа');
+    // localStorage-д үлдсэн session устгах
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('sb-')) localStorage.removeItem(key);
+    });
   }, []);
 
   const value = useMemo<AuthContextType>(
-    () => ({
-      session,
-      user,
-      profile,
-      role,
-      loading,
-      error,
-      signUp,
-      signIn,
-      signOut,
-      refreshProfile,
-    }),
+    () => ({ session, user, profile, role, loading, error, signUp, signIn, signOut, refreshProfile }),
     [session, user, profile, role, loading, error, signUp, signIn, signOut, refreshProfile],
   );
 
@@ -161,9 +185,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 export function useAuthContext() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuthContext must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuthContext must be used within AuthProvider');
+  return ctx;
 }
