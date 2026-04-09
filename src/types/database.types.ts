@@ -524,6 +524,40 @@ export interface Database {
         };
         Relationships: [];
       };
+      site_stats: {
+        Row: {
+          id: string;
+          total_members: number;
+          total_km: number;
+          total_rides: number;
+          total_routes: number;
+          monthly_km: number;
+          monthly_rides: number;
+          green_co2_saved_kg: number;
+          calculated_at: string;
+        };
+        Insert: {
+          total_members?: number;
+          total_km?: number;
+          total_rides?: number;
+          total_routes?: number;
+          monthly_km?: number;
+          monthly_rides?: number;
+          green_co2_saved_kg?: number;
+          calculated_at?: string;
+        };
+        Update: {
+          total_members?: number;
+          total_km?: number;
+          total_rides?: number;
+          total_routes?: number;
+          monthly_km?: number;
+          monthly_rides?: number;
+          green_co2_saved_kg?: number;
+          calculated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       monthly_leaderboard: {
