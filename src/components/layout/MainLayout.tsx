@@ -1,6 +1,8 @@
 import { Outlet } from 'react-router-dom';
 import Navbar from './Navbar';
 import Footer from './Footer';
+import SOSButton from '../sos/SOSButton';
+import SOSAlert from '../sos/SOSAlert';
 
 export default function MainLayout() {
   return (
@@ -10,6 +12,8 @@ export default function MainLayout() {
         <Outlet />
       </main>
       <Footer />
+      <SOSButton />
+      <SOSAlert />
     </div>
   );
 }

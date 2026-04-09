@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, Mountain, ArrowRight, Star } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabasePublic as supabase } from '../../lib/supabase';
 import type { Tables } from '../../types/database.types';
 
 type Route = Tables<'routes'>;
@@ -52,7 +52,7 @@ export default function FeaturedRoutes() {
           </div>
         ) : routes.length === 0 ? (
           <div className="text-center py-16 text-gray-400">
-            <MapPin className="w-12 h-12 mx-auto mb-3 opacity-50" />
+            <MapPin className="w-12 h-12 mx-auto mb-3 text-gray-300" />
             <p>Одоогоор маршрут байхгүй байна</p>
           </div>
         ) : (

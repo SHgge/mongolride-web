@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { useState, useEffect, useRef } from 'react';
+import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, X, Bike, Bell, User, LogOut, Shield } from 'lucide-react';
+import { Menu, X, Bike, User, LogOut, Shield, Sun, Moon } from 'lucide-react';
+import { useTheme } from '../../contexts/ThemeContext';
+import NotificationDropdown from './NotificationDropdown';
+import GlobalSearch from './GlobalSearch';
 
 const NAV_LINKS = [
   { to: '/', label: 'Нүүр' },
@@ -14,8 +17,22 @@ const NAV_LINKS = [
 
 export default function Navbar() {
   const { isAuthenticated, isAdmin, profile, signOut } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Click outside хаах
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setProfileOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   return (
     <nav className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
@@ -52,11 +69,16 @@ export default function Navbar() {
           <div className="hidden md:flex items-center gap-3">
             {isAuthenticated ? (
               <>
-                <button className="relative p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                <GlobalSearch />
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700"
+                  title={isDark ? 'Light mode' : 'Dark mode'}
+                >
+                  {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
-                <div className="relative">
+                <NotificationDropdown />
+                <div className="relative" ref={dropdownRef}>
                   <button
                     onClick={() => setProfileOpen(!profileOpen)}
                     className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
@@ -83,7 +105,7 @@ export default function Navbar() {
                         </Link>
                       )}
                       <hr className="my-1 border-gray-100" />
-                      <button onClick={() => { setProfileOpen(false); signOut(); }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
+                      <button onClick={async () => { setProfileOpen(false); await signOut(); navigate('/'); }} className="flex items-center gap-2 w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50">
                         <LogOut className="w-4 h-4" /> Гарах
                       </button>
                     </div>
@@ -92,6 +114,14 @@ export default function Navbar() {
               </>
             ) : (
               <div className="flex items-center gap-2">
+                <GlobalSearch />
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors dark:text-gray-400 dark:hover:text-white dark:hover:bg-gray-700"
+                  title={isDark ? 'Light mode' : 'Dark mode'}
+                >
+                  {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                </button>
                 <Link to="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900">Нэвтрэх</Link>
                 <Link to="/register" className="px-4 py-2 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 transition-colors">Бүртгүүлэх</Link>
               </div>
@@ -109,7 +139,7 @@ export default function Navbar() {
           <div className="px-4 py-3 space-y-1">
             {NAV_LINKS.map((link) => (
               <NavLink key={link.to} to={link.to} end={link.to === '/'} onClick={() => setMobileOpen(false)}
-                className={({ isActive }) => `block px-3 py-2.5 rounded-lg text-sm font-medium ${isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                className={({ isActive }) => `block px-3 py-2.5 rounded-lg text-sm font-medium ${isActive ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'}`}>
                 {link.label}
               </NavLink>
             ))}

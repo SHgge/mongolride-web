@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { Users, Route, MapPin, Leaf } from 'lucide-react';
-import { supabase } from '../../lib/supabase';
+import { supabasePublic as supabase } from '../../lib/supabase';
 
 interface StatItem {
   icon: React.ElementType;
@@ -36,36 +36,33 @@ function AnimatedNumber({ value, suffix = '' }: { value: number; suffix?: string
 
 export default function StatsCounter() {
   const [stats, setStats] = useState<StatItem[]>([
-    { icon: Users, value: 0, label: 'Нийт гишүүд' },
-    { icon: Route, value: 0, label: 'Нийт км', suffix: ' км' },
-    { icon: MapPin, value: 0, label: 'Маршрутууд' },
-    { icon: Leaf, value: 0, label: 'CO₂ хэмнэлт', suffix: ' кг' },
+    { icon: Users, value: 500, label: 'Нийт гишүүд' },
+    { icon: Route, value: 120000, label: 'Нийт км', suffix: ' км' },
+    { icon: MapPin, value: 50, label: 'Маршрутууд' },
+    { icon: Leaf, value: 25000, label: 'CO₂ хэмнэлт', suffix: ' кг' },
   ]);
 
   useEffect(() => {
-    supabase
-      .from('site_stats')
-      .select('*')
-      .order('calculated_at', { ascending: false })
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data[0]) {
-          const s = data[0];
-          setStats([
-            { icon: Users, value: s.total_members || 500, label: 'Нийт гишүүд' },
-            { icon: Route, value: Math.round(s.total_km) || 120000, label: 'Нийт км', suffix: ' км' },
-            { icon: MapPin, value: s.total_routes || 50, label: 'Маршрутууд' },
-            { icon: Leaf, value: Math.round(s.green_co2_saved_kg) || 25000, label: 'CO₂ хэмнэлт', suffix: ' кг' },
-          ]);
-        } else {
-          setStats([
-            { icon: Users, value: 500, label: 'Нийт гишүүд' },
-            { icon: Route, value: 120000, label: 'Нийт км', suffix: ' км' },
-            { icon: MapPin, value: 50, label: 'Маршрутууд' },
-            { icon: Leaf, value: 25000, label: 'CO₂ хэмнэлт', suffix: ' кг' },
-          ]);
-        }
-      });
+    // site_stats-ийн оронд шууд тоолох (RLS асуудалгүй)
+    Promise.all([
+      supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_active', true),
+      supabase.from('profiles').select('total_km'),
+      supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+    ]).then(([membersRes, kmRes, routesRes]) => {
+      const totalMembers = membersRes.count ?? 0;
+      const totalKm = (kmRes.data ?? []).reduce((sum, p) => sum + Number(p.total_km ?? 0), 0);
+      const totalRoutes = routesRes.count ?? 0;
+      const co2Saved = Math.round(totalKm * 0.21);
+
+      setStats([
+        { icon: Users, value: totalMembers || 500, label: 'Нийт гишүүд' },
+        { icon: Route, value: Math.round(totalKm) || 120000, label: 'Нийт км', suffix: ' км' },
+        { icon: MapPin, value: totalRoutes || 50, label: 'Маршрутууд' },
+        { icon: Leaf, value: co2Saved || 25000, label: 'CO₂ хэмнэлт', suffix: ' кг' },
+      ]);
+    }).catch(() => {
+      // Fallback — default утгууд аль хэдийн тохируулсан
+    });
   }, []);
 
   return (

@@ -20,7 +20,7 @@ export default function HeroSection() {
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold text-white leading-tight mb-6">
             Хамтдаа дугуйлж,
             <br />
-            <span className="text-primary-300">Монголыг нээцгээе</span>
+            <span className="text-primary-200">Монголыг нээцгээе</span>
           </h1>
 
           <p className="text-lg md:text-xl text-white/80 mb-8 max-w-2xl leading-relaxed">
@@ -48,7 +48,7 @@ export default function HeroSection() {
           <div className="flex flex-wrap gap-8">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
-                <Users className="w-5 h-5 text-primary-300" />
+                <Users className="w-5 h-5 text-primary-200" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">500+</div>
@@ -57,7 +57,7 @@ export default function HeroSection() {
             </div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
-                <MapPin className="w-5 h-5 text-primary-300" />
+                <MapPin className="w-5 h-5 text-primary-200" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">50+</div>
@@ -66,7 +66,7 @@ export default function HeroSection() {
             </div>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-white/10 rounded-lg flex items-center justify-center">
-                <Trophy className="w-5 h-5 text-primary-300" />
+                <Trophy className="w-5 h-5 text-primary-200" />
               </div>
               <div>
                 <div className="text-2xl font-bold text-white">120K+</div>
