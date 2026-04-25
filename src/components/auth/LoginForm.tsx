@@ -6,7 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Mail, Lock, Loader2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
-import { loginSchema, type LoginInput } from '../../utils/validators';
+import { loginSchema, type LoginInput } from '../../lib/validation';
+import { genericAuthError, isEmailNotConfirmed } from '../../lib/auth-errors';
 
 export default function LoginForm() {
   const { signIn } = useAuth();
@@ -42,8 +43,15 @@ export default function LoginForm() {
     setServerError(null);
     const { error } = await signIn(data.email, data.password);
     if (error) {
-      setServerError(error);
-      toast.error(error);
+      const errorObj = { message: error };
+      // Email not confirmed → redirect to verify page
+      if (isEmailNotConfirmed(errorObj)) {
+        navigate(`/verify-email-needed?email=${encodeURIComponent(data.email)}`);
+        return;
+      }
+      const generic = genericAuthError(errorObj);
+      setServerError(generic);
+      toast.error(generic);
     } else {
       navigate('/');
       toast.success('Амжилттай нэвтэрлээ!');

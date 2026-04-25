@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Bike, Mail, ArrowLeft, Loader2, CheckCircle2, Send } from 'lucide-react';
-import { authService } from '../services/auth.service';
+import { supabase } from '../lib/supabase';
 
 const forgotSchema = z.object({
   email: z.string().email('И-мэйл хаяг буруу байна'),
@@ -27,13 +27,15 @@ export default function ForgotPasswordPage() {
 
   const onSubmit = async (data: ForgotInput) => {
     setServerError(null);
-    const { error } = await authService.resetPassword(data.email);
+    // Always show generic success — don't leak whether email exists
+    const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
+      redirectTo: `${window.location.origin}/reset-password/callback`,
+    });
     if (error) {
-      setServerError(error);
-    } else {
-      setSentEmail(data.email);
-      setSuccess(true);
+      console.error('[reset]', error.message);
     }
+    setSentEmail(data.email);
+    setSuccess(true);
   };
 
   return (
@@ -58,7 +60,7 @@ export default function ForgotPasswordPage() {
               </div>
               <h1 className="text-2xl font-bold text-gray-900 mb-2">И-мэйл илгээлээ!</h1>
               <p className="text-gray-500 text-sm mb-2">
-                Нууц үг сэргээх линкийг дараах хаяг руу илгээлээ:
+                Хэрэв таны имэйл бүртгэлтэй бол сэргээх холбоос илгээгдлээ.
               </p>
               <p className="text-sm font-medium text-gray-900 bg-gray-50 rounded-lg px-4 py-2.5 mb-6">
                 {sentEmail}

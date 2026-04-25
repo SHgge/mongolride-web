@@ -1,11 +1,15 @@
-import { useEffect, useState } from 'react';
-import { Search, User, ChevronDown, Check, Edit2, UserX, UserCheck } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Search, User, ChevronDown, Check, Edit2, UserX, UserCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import toast from 'react-hot-toast';
 import type { Tables, UserRole } from '../../types/database.types';
 import { RANK_LABELS, RANK_COLORS, type UserRank } from '../../types/user.types';
+import { useAuth } from '../../hooks/useAuth';
+import { logAudit, AuditActions } from '../../lib/audit';
 
 type Profile = Tables<'profiles'>;
+
+const PAGE_SIZE = 50;
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
   guest: { label: 'Зочин', color: 'bg-gray-100 text-gray-600' },
@@ -13,10 +17,20 @@ const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
   admin: { label: 'Админ', color: 'bg-red-100 text-red-700' },
 };
 
+type RoleFilter = 'all' | UserRole;
+
 export default function MemberManagement() {
+  const { user: currentUser } = useAuth();
+
   const [members, setMembers] = useState<Profile[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalAdmins, setTotalAdmins] = useState(0);
   const [loading, setLoading] = useState(true);
+
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
+  const [page, setPage] = useState(0);
+
   const [editingRole, setEditingRole] = useState<string | null>(null);
   const [editMember, setEditMember] = useState<Profile | null>(null);
   const [editName, setEditName] = useState('');
@@ -24,22 +38,76 @@ export default function MemberManagement() {
   const [editBio, setEditBio] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Reset to page 0 when search/filter changes
   useEffect(() => {
-    supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .then(({ data }) => {
-        setMembers(data ?? []);
-        setLoading(false);
-      });
-  }, []);
+    setPage(0);
+  }, [search, roleFilter]);
 
-  const handleRoleChange = async (userId: string, newRole: UserRole) => {
-    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
-    if (!error) {
-      setMembers((prev) => prev.map((m) => (m.id === userId ? { ...m, role: newRole } : m)));
+  const fetchMembers = useCallback(async () => {
+    setLoading(true);
+
+    let query = supabase
+      .from('profiles')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+
+    if (roleFilter !== 'all') query = query.eq('role', roleFilter);
+    if (search.trim()) {
+      const s = search.trim();
+      query = query.or(`full_name.ilike.%${s}%,phone.ilike.%${s}%`);
     }
+
+    const { data, count, error } = await query;
+    if (error) toast.error('Гишүүд ачаалахад алдаа гарлаа');
+
+    setMembers(data ?? []);
+    setTotalCount(count ?? 0);
+    setLoading(false);
+
+    // Total admin count (defense-in-depth for last admin guard)
+    const { count: adminCount } = await supabase
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'admin');
+    setTotalAdmins(adminCount ?? 0);
+  }, [page, roleFilter, search]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => fetchMembers(), search ? 300 : 0);
+    return () => clearTimeout(timer);
+  }, [fetchMembers, search]);
+
+  const handleRoleChange = async (member: Profile, newRole: UserRole) => {
+    if (member.role === newRole) {
+      setEditingRole(null);
+      return;
+    }
+
+    const fromRole = member.role;
+    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', member.id);
+
+    if (error) {
+      // P0001 = last admin demotion (custom error from DB trigger)
+      if (error.code === 'P0001' || /last admin/i.test(error.message)) {
+        toast.error('Сүүлчийн админыг хасах боломжгүй. Эхлээд өөр хэрэглэгчид admin эрх олгоно уу.');
+      } else {
+        toast.error('Эрх солиход алдаа гарлаа');
+      }
+      setEditingRole(null);
+      return;
+    }
+
+    // Success
+    setMembers((prev) => prev.map((m) => (m.id === member.id ? { ...m, role: newRole } : m)));
+    if (fromRole === 'admin' && newRole !== 'admin') setTotalAdmins((c) => c - 1);
+    if (fromRole !== 'admin' && newRole === 'admin') setTotalAdmins((c) => c + 1);
+
+    toast.success(`Эрх "${ROLE_LABELS[newRole].label}" болж шинэчлэгдлээ`);
+
+    // Audit log
+    await logAudit(AuditActions.ROLE_CHANGED, member.id, { from: fromRole, to: newRole });
+
     setEditingRole(null);
   };
 
@@ -68,38 +136,61 @@ export default function MemberManagement() {
     setSaving(false);
   };
 
-  const toggleActive = async (userId: string, currentActive: boolean) => {
-    const { error } = await supabase.from('profiles').update({ is_active: !currentActive }).eq('id', userId);
+  const toggleActive = async (member: Profile) => {
+    const newActive = !member.is_active;
+    const { error } = await supabase.from('profiles').update({ is_active: newActive }).eq('id', member.id);
     if (!error) {
-      setMembers((prev) => prev.map((m) => m.id === userId ? { ...m, is_active: !currentActive } : m));
-      toast.success(!currentActive ? 'Гишүүн идэвхжүүлсэн' : 'Гишүүн идэвхгүй болголоо');
+      setMembers((prev) => prev.map((m) => m.id === member.id ? { ...m, is_active: newActive } : m));
+      toast.success(newActive ? 'Гишүүн идэвхжүүлсэн' : 'Гишүүн идэвхгүй болголоо');
+      await logAudit(newActive ? AuditActions.USER_ACTIVATED : AuditActions.USER_DEACTIVATED, member.id);
+    } else {
+      toast.error('Алдаа гарлаа');
     }
   };
 
-  const filtered = members.filter((m) =>
-    m.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    (m.phone?.includes(search) ?? false)
-  );
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+
+  // Last-admin guard helper: cannot demote yourself if you're the last admin
+  const isLastAdminCheck = (member: Profile, targetRole: UserRole): boolean => {
+    return member.role === 'admin' && targetRole !== 'admin' && totalAdmins <= 1;
+  };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Гишүүд</h1>
-          <p className="text-gray-500 text-sm mt-1">{members.length} гишүүн</p>
+          <p className="text-gray-500 text-sm mt-1">Нийт {totalCount} хэрэглэгч</p>
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative mb-6">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-        <input
-          type="text"
-          placeholder="Нэр, утасны дугаараар хайх..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-        />
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Нэр, утасны дугаараар хайх..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+          />
+        </div>
+        <div className="flex gap-2">
+          {(['all', 'admin', 'member', 'guest'] as RoleFilter[]).map((r) => (
+            <button
+              key={r}
+              onClick={() => setRoleFilter(r)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                roleFilter === r
+                  ? 'bg-primary-100 text-primary-700 ring-1 ring-primary-300'
+                  : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              {r === 'all' ? 'Бүгд' : ROLE_LABELS[r as UserRole].label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Table */}
@@ -124,13 +215,14 @@ export default function MemberManagement() {
                     <td colSpan={7} className="px-4 py-4"><div className="h-6 bg-gray-100 rounded animate-pulse" /></td>
                   </tr>
                 ))
-              ) : filtered.length === 0 ? (
+              ) : members.length === 0 ? (
                 <tr><td colSpan={7} className="px-4 py-12 text-center text-gray-400">Гишүүн олдсонгүй</td></tr>
               ) : (
-                filtered.map((member) => {
+                members.map((member) => {
                   const roleInfo = ROLE_LABELS[member.role] ?? ROLE_LABELS.member;
                   const rankColor = RANK_COLORS[member.rank as UserRank] ?? '#9ca3af';
                   const rankLabel = RANK_LABELS[member.rank as UserRank] ?? member.rank;
+                  const isSelf = currentUser?.id === member.id;
 
                   return (
                     <tr key={member.id} className="border-b border-gray-50 hover:bg-gray-50/50">
@@ -144,7 +236,10 @@ export default function MemberManagement() {
                             )}
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900">{member.full_name}</div>
+                            <div className="font-medium text-gray-900">
+                              {member.full_name}
+                              {isSelf && <span className="ml-2 text-xs text-primary-600">(Та)</span>}
+                            </div>
                             {member.phone && <div className="text-xs text-gray-400">{member.phone}</div>}
                           </div>
                         </div>
@@ -163,17 +258,22 @@ export default function MemberManagement() {
                             {roleInfo.label} <ChevronDown className="w-3 h-3" />
                           </button>
                           {editingRole === member.id && (
-                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10 min-w-[120px]">
-                              {(['guest', 'member', 'admin'] as UserRole[]).map((r) => (
-                                <button
-                                  key={r}
-                                  onClick={() => handleRoleChange(member.id, r)}
-                                  className="flex items-center justify-between w-full px-3 py-2 text-xs hover:bg-gray-50"
-                                >
-                                  <span className={`px-1.5 py-0.5 rounded ${ROLE_LABELS[r].color}`}>{ROLE_LABELS[r].label}</span>
-                                  {member.role === r && <Check className="w-3.5 h-3.5 text-primary-600" />}
-                                </button>
-                              ))}
+                            <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10 min-w-[140px]">
+                              {(['guest', 'member', 'admin'] as UserRole[]).map((r) => {
+                                const disabled = isLastAdminCheck(member, r);
+                                return (
+                                  <button
+                                    key={r}
+                                    onClick={() => !disabled && handleRoleChange(member, r)}
+                                    disabled={disabled}
+                                    title={disabled ? 'Сүүлчийн админыг хасах боломжгүй' : ''}
+                                    className={`flex items-center justify-between w-full px-3 py-2 text-xs ${disabled ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-50'}`}
+                                  >
+                                    <span className={`px-1.5 py-0.5 rounded ${ROLE_LABELS[r].color}`}>{ROLE_LABELS[r].label}</span>
+                                    {member.role === r && <Check className="w-3.5 h-3.5 text-primary-600" />}
+                                  </button>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -186,7 +286,7 @@ export default function MemberManagement() {
                           <button onClick={() => openEdit(member)} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg" title="Засах">
                             <Edit2 className="w-4 h-4" />
                           </button>
-                          <button onClick={() => toggleActive(member.id, member.is_active)}
+                          <button onClick={() => toggleActive(member)}
                             className={`p-1.5 rounded-lg ${member.is_active ? 'text-orange-400 hover:text-orange-600 hover:bg-orange-50' : 'text-green-400 hover:text-green-600 hover:bg-green-50'}`}
                             title={member.is_active ? 'Идэвхгүй болгох' : 'Идэвхжүүлэх'}>
                             {member.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
@@ -200,6 +300,32 @@ export default function MemberManagement() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t border-gray-100">
+            <div className="text-xs text-gray-500">
+              {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, totalCount)} / {totalCount}
+            </div>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              {renderPageNumbers(page, totalPages, setPage)}
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg disabled:opacity-30"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Edit modal */}
@@ -236,5 +362,39 @@ export default function MemberManagement() {
         </div>
       )}
     </div>
+  );
+}
+
+function renderPageNumbers(current: number, total: number, onClick: (p: number) => void) {
+  const pages: (number | 'ellipsis')[] = [];
+
+  if (total <= 10) {
+    for (let i = 0; i < total; i++) pages.push(i);
+  } else {
+    pages.push(0);
+    if (current > 3) pages.push('ellipsis');
+
+    const start = Math.max(1, current - 1);
+    const end = Math.min(total - 2, current + 1);
+    for (let i = start; i <= end; i++) pages.push(i);
+
+    if (current < total - 4) pages.push('ellipsis');
+    pages.push(total - 1);
+  }
+
+  return pages.map((p, i) =>
+    p === 'ellipsis' ? (
+      <span key={`e${i}`} className="px-2 text-gray-400 text-xs">…</span>
+    ) : (
+      <button
+        key={p}
+        onClick={() => onClick(p)}
+        className={`min-w-[28px] px-2 py-1 rounded-md text-xs font-medium ${
+          current === p ? 'bg-primary-600 text-white' : 'text-gray-600 hover:bg-gray-100'
+        }`}
+      >
+        {p + 1}
+      </button>
+    ),
   );
 }

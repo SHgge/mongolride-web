@@ -6,13 +6,16 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Eye, EyeOff, Mail, Lock, User, Loader2, CheckCircle2 } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../lib/supabase';
-import { registerSchema, type RegisterInput } from '../../utils/validators';
+import { registerSchema, type RegisterInput } from '../../lib/validation';
+import { isPasswordPwned } from '../../lib/hibp';
+import { genericAuthError } from '../../lib/auth-errors';
 
 export default function RegisterForm() {
   const { signUp } = useAuth();
   const [showPassword, setShowPassword] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [pwnedWarning, setPwnedWarning] = useState(false);
 
   const handleGoogleSignUp = async () => {
     setGoogleLoading(true);
@@ -44,9 +47,19 @@ export default function RegisterForm() {
 
   const onSubmit = async (data: RegisterInput) => {
     setServerError(null);
+
+    // HIBP check (non-blocking warning)
+    const pwned = await isPasswordPwned(data.password);
+    if (pwned && !pwnedWarning) {
+      setPwnedWarning(true);
+      return;
+    }
+
     const { error } = await signUp(data.email, data.password, data.full_name);
     if (error) {
-      setServerError(error);
+      const generic = genericAuthError({ message: error });
+      setServerError(generic);
+      toast.error(generic);
     } else {
       setSuccess(true);
       toast.success('Бүртгэл амжилттай!');
@@ -103,31 +116,6 @@ export default function RegisterForm() {
         </div>
         {errors.full_name && (
           <p className="mt-1 text-sm text-red-500">{errors.full_name.message}</p>
-        )}
-      </div>
-
-      {/* Username */}
-      <div>
-        <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1.5">
-          Хэрэглэгчийн нэр
-        </label>
-        <div className="relative">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">@</span>
-          <input
-            id="username"
-            type="text"
-            autoComplete="username"
-            placeholder="baterdene"
-            className={`w-full pl-8 pr-4 py-2.5 border rounded-lg text-sm focus:outline-none focus:ring-2 transition-colors ${
-              errors.username
-                ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
-                : 'border-gray-200 focus:ring-primary-500/20 focus:border-primary-500'
-            }`}
-            {...register('username')}
-          />
-        </div>
-        {errors.username && (
-          <p className="mt-1 text-sm text-red-500">{errors.username.message}</p>
         )}
       </div>
 
@@ -207,6 +195,14 @@ export default function RegisterForm() {
           </div>
         )}
       </div>
+
+      {pwnedWarning && (
+        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg text-sm text-yellow-800">
+          <p className="font-medium mb-1">⚠️ Анхаар!</p>
+          <p>Энэ нууц үг өмнө нь алдагдсан хэрэглэгчдийн жагсаалтад орсон. Үргэлжлүүлэх боломжтой ч өөр нууц үг сонгохыг зөвлөж байна.</p>
+          <button type="button" onClick={() => setPwnedWarning(false)} className="mt-2 text-xs underline">Үл тоомсорлох</button>
+        </div>
+      )}
 
       {/* Submit */}
       <button

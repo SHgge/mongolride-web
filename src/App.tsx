@@ -12,6 +12,8 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordCallback from './pages/ResetPasswordCallback';
+import VerifyEmailNeededPage from './pages/VerifyEmailNeededPage';
 import RoutesPage from './pages/RoutesPage';
 import RouteDetailPage from './pages/RouteDetailPage';
 import AddRoutePage from './pages/AddRoutePage';
@@ -46,6 +48,8 @@ export default function App() {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password/callback" element={<ResetPasswordCallback />} />
+                <Route path="/verify-email-needed" element={<VerifyEmailNeededPage />} />
                 <Route path="/routes" element={<RoutesPage />} />
                 <Route path="/routes/:id" element={<RouteDetailPage />} />
                 <Route path="/events" element={<EventsPage />} />
