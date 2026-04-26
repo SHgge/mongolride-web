@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { MapPin, Mountain, Bike, Award, Calendar, TrendingUp } from 'lucide-react';
 import { RANK_LABELS, RANK_COLORS, RANK_MIN_KM, type UserRank } from '../types/user.types';
@@ -10,6 +11,24 @@ import ActivityHistory from '../components/profile/ActivityHistory';
 export default function ProfilePage() {
   const { profile, isLoading, refreshProfile } = useAuth();
   const [refreshKey, setRefreshKey] = useState(0);
+  const [membershipStatus, setMembershipStatus] = useState<'pending' | 'approved' | 'rejected' | null>(null);
+  const [membershipReason, setMembershipReason] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!profile) return;
+    supabase.from('membership_requests')
+      .select('status, reason')
+      .eq('user_id', profile.id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setMembershipStatus(data.status);
+          setMembershipReason(data.reason);
+        }
+      });
+  }, [profile]);
 
   if (isLoading) {
     return (
@@ -68,6 +87,21 @@ export default function ProfilePage() {
                 {rankLabel}
               </span>
               <span className="text-sm text-gray-400 capitalize">{profile.role}</span>
+              {profile.role === 'guest' && membershipStatus === 'pending' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">
+                  Хүсэлт хүлээгдэж байна
+                </span>
+              )}
+              {profile.role === 'guest' && membershipStatus === 'rejected' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700" title={membershipReason ?? ''}>
+                  Хүсэлт татгалзагдсан
+                </span>
+              )}
+              {profile.role === 'guest' && !membershipStatus && (
+                <Link to="/join" className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-700 hover:bg-primary-200">
+                  Клубт нэгдэх
+                </Link>
+              )}
             </div>
             {profile.bio && <p className="text-gray-500 text-sm mb-3">{profile.bio}</p>}
             <div className="flex items-center justify-center sm:justify-start gap-4 text-xs text-gray-400">

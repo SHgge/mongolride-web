@@ -1,10 +1,11 @@
 import { NavLink, Link, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, MapPin, Calendar, ShoppingBag, Newspaper, Shield, Settings, ArrowLeft, Bike, LogOut, User } from 'lucide-react';
+import { LayoutDashboard, Users, MapPin, Calendar, ShoppingBag, Newspaper, Shield, Settings, ArrowLeft, Bike, LogOut, User, UserPlus } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
 
 const ADMIN_LINKS = [
   { to: '/admin', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/admin/members', label: 'Гишүүд', icon: Users },
+  { to: '/admin/membership-requests', label: 'Хүсэлтүүд', icon: UserPlus },
   { to: '/admin/routes', label: 'Маршрутууд', icon: MapPin },
   { to: '/admin/events', label: 'Арга хэмжээ', icon: Calendar },
   { to: '/admin/marketplace', label: 'Зах зээл', icon: ShoppingBag },

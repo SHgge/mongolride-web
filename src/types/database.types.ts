@@ -9,7 +9,7 @@ export type ListingCategory = 'bike' | 'parts' | 'clothing' | 'accessories' | 'o
 export type ListingCondition = 'new' | 'like_new' | 'used' | 'for_parts';
 export type ListingStatus = 'active' | 'sold' | 'reserved' | 'removed';
 export type SOSStatus = 'active' | 'responding' | 'resolved' | 'false_alarm';
-export type NotificationType = 'event' | 'sos' | 'marketplace' | 'route' | 'system' | 'achievement';
+export type NotificationType = 'event' | 'sos' | 'marketplace' | 'route' | 'system' | 'achievement' | 'membership.approved' | 'membership.rejected';
 export type NewsCategory = 'general' | 'tips' | 'gear_review' | 'race' | 'announcement';
 export type BadgeRequirement = 'km' | 'rides' | 'route' | 'event' | 'special';
 
@@ -557,6 +557,69 @@ export interface Database {
           monthly_rides?: number;
           green_co2_saved_kg?: number;
           calculated_at?: string;
+        };
+        Relationships: [];
+      };
+      club_settings: {
+        Row: {
+          id: number;
+          name: string;
+          description: string | null;
+          logo_path: string | null;
+          contact_email: string | null;
+          contact_phone: string | null;
+          facebook_url: string | null;
+          instagram_url: string | null;
+          website_url: string | null;
+          rejection_cooldown_days: number;
+          updated_at: string;
+        };
+        Insert: {
+          id?: number;
+          name: string;
+          description?: string | null;
+          logo_path?: string | null;
+          contact_email?: string | null;
+          contact_phone?: string | null;
+          facebook_url?: string | null;
+          instagram_url?: string | null;
+          website_url?: string | null;
+          rejection_cooldown_days?: number;
+        };
+        Update: {
+          name?: string;
+          description?: string | null;
+          logo_path?: string | null;
+          contact_email?: string | null;
+          contact_phone?: string | null;
+          facebook_url?: string | null;
+          instagram_url?: string | null;
+          website_url?: string | null;
+          rejection_cooldown_days?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      membership_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          status: 'pending' | 'approved' | 'rejected';
+          motivation: string | null;
+          reason: string | null;
+          decided_at: string | null;
+          decided_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          user_id: string;
+          motivation?: string | null;
+        };
+        Update: {
+          status?: 'pending' | 'approved' | 'rejected';
+          reason?: string | null;
+          decided_at?: string | null;
+          decided_by?: string | null;
         };
         Relationships: [];
       };

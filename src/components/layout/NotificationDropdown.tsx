@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
-import { Bell, Check, CheckCheck, Trash2, AlertTriangle, Calendar, MapPin, ShoppingBag, Trophy, Info } from 'lucide-react';
+import { Bell, Check, CheckCheck, Trash2, AlertTriangle, Calendar, MapPin, ShoppingBag, Trophy, Info, UserCheck, UserX } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import type { Tables } from '../../types/database.types';
@@ -13,6 +14,8 @@ const TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string }> = 
   route: { icon: MapPin, color: 'text-green-500 bg-green-50' },
   achievement: { icon: Trophy, color: 'text-purple-500 bg-purple-50' },
   system: { icon: Info, color: 'text-gray-500 bg-gray-50' },
+  'membership.approved': { icon: UserCheck, color: 'text-green-500 bg-green-50' },
+  'membership.rejected': { icon: UserX, color: 'text-red-500 bg-red-50' },
 };
 
 function timeAgo(dateStr: string): string {
@@ -64,6 +67,16 @@ export default function NotificationDropdown() {
           const newNotif = payload.new as Notification;
           setNotifications((prev) => [newNotif, ...prev]);
           setUnreadCount((c) => c + 1);
+          // Show realtime toast for important types
+          if (newNotif.type === 'membership.approved') {
+            toast.success(newNotif.title, { duration: 5000 });
+          } else if (newNotif.type === 'membership.rejected') {
+            toast.error(newNotif.title, { duration: 5000 });
+          } else if (newNotif.type === 'sos') {
+            toast.error(newNotif.title, { duration: 8000 });
+          } else {
+            toast(newNotif.title);
+          }
         },
       )
       .subscribe();
