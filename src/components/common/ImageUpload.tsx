@@ -3,7 +3,7 @@ import { Upload, X, Loader2, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface ImageUploadProps {
-  bucket: 'avatars' | 'routes' | 'listings';
+  bucket: 'avatars' | 'routes' | 'listings' | 'event-assets';
   folder: string;
   onUpload: (url: string) => void;
   currentUrl?: string | null;

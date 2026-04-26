@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Edit2, Trash2 } from 'lucide-react';
+import { Edit2, Trash2, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
 import type { Tables } from '../../types/database.types';
@@ -21,7 +21,11 @@ const STATUS_LABELS: Record<string, string> = {
   completed: 'Дууссан',
 };
 
-export default function EventManagement() {
+interface EventManagementProps {
+  onEdit?: (eventId: string) => void;
+}
+
+export default function EventManagement({ onEdit }: EventManagementProps) {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
@@ -32,9 +36,20 @@ export default function EventManagement() {
   }, []);
 
   const updateStatus = async (id: string, status: EventStatus) => {
-    const { error } = await supabase.from('events').update({ status }).eq('id', id);
-    if (!error) {
+    // Use status-transition RPC to enforce guard rules
+    const rpcFn = (supabase.rpc as unknown) as (
+      fn: string,
+      args: Record<string, unknown>,
+    ) => Promise<{ error: { message: string } | null }>;
+    const { error } = await rpcFn('change_event_status', {
+      p_event_id: id,
+      p_new_status: status,
+    });
+    if (error) {
+      toast.error(error.message ?? 'Төлөв солиход алдаа гарлаа');
+    } else {
       setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, status } : e)));
+      toast.success('Төлөв шинэчлэгдлээ');
     }
     setEditingStatus(null);
   };
@@ -62,17 +77,18 @@ export default function EventManagement() {
               <th className="text-left px-4 py-3 font-medium text-gray-500">Огноо</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Багтаамж</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Төлөв</th>
+              <th className="text-right px-4 py-3 font-medium text-gray-500">Үйлдэл</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={i} className="border-b border-gray-50">
-                  <td colSpan={4} className="px-4 py-4"><div className="h-6 bg-gray-100 rounded animate-pulse" /></td>
+                  <td colSpan={5} className="px-4 py-4"><div className="h-6 bg-gray-100 rounded animate-pulse" /></td>
                 </tr>
               ))
             ) : events.length === 0 ? (
-              <tr><td colSpan={4} className="px-4 py-12 text-center text-gray-400">Арга хэмжээ байхгүй</td></tr>
+              <tr><td colSpan={5} className="px-4 py-12 text-center text-gray-400">Арга хэмжээ байхгүй</td></tr>
             ) : (
               events.map((event) => (
                 <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50/50">
@@ -103,6 +119,15 @@ export default function EventManagement() {
                         </div>
                       )}
                     </div>
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    {onEdit && (
+                      <button onClick={() => onEdit(event.id)}
+                        className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg ml-1"
+                        title="Засах">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    )}
                     <button onClick={() => deleteEvent(event.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg ml-1" title="Устгах">
                       <Trash2 className="w-4 h-4" />
                     </button>

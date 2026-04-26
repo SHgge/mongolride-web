@@ -1,0 +1,44 @@
+-- ============================================================
+-- pg_cron schedules for EP-03 event lifecycle automation
+-- Pre-req: pg_cron + pg_net extensions enabled (Supabase has them by default)
+-- Pre-req: app.settings.service_role_key set in Database → Settings
+-- ============================================================
+
+-- Idempotency: drop existing schedules with the same name
+do $$ begin
+  perform cron.unschedule('complete-past-events');
+exception when others then null; end $$;
+
+do $$ begin
+  perform cron.unschedule('send-event-reminders');
+exception when others then null; end $$;
+
+-- complete-past-events: daily at 02:00 ICT (= 18:00 UTC previous day)
+select cron.schedule(
+  'complete-past-events',
+  '0 18 * * *',
+  $$
+  select net.http_post(
+    url := 'https://ebpdvytkvmhpfcrhqypj.functions.supabase.co/complete-past-events',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true),
+      'Content-Type', 'application/json'
+    )
+  );
+  $$
+);
+
+-- send-event-reminders: every 15 minutes
+select cron.schedule(
+  'send-event-reminders',
+  '*/15 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://ebpdvytkvmhpfcrhqypj.functions.supabase.co/send-event-reminders',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key', true),
+      'Content-Type', 'application/json'
+    )
+  );
+  $$
+);
