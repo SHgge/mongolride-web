@@ -20,9 +20,9 @@ export default function UpcomingEvents() {
     supabase
       .from('events')
       .select('*')
-      .eq('status', 'upcoming')
-      .gte('event_date', new Date().toISOString())
-      .order('event_date', { ascending: true })
+      .eq('status', 'published')
+      .gte('meet_at', new Date().toISOString())
+      .order('meet_at', { ascending: true })
       .limit(3)
       .then(({ data }) => {
         setEvents(data ?? []);
@@ -58,8 +58,7 @@ export default function UpcomingEvents() {
         ) : (
           <div className="grid md:grid-cols-3 gap-6">
             {events.map((event) => {
-              const { day, month, time } = formatEventDate(event.event_date);
-              const spotsLeft = event.max_participants ? event.max_participants - event.current_participants : null;
+              const { day, month, time } = formatEventDate(event.meet_at);
               return (
                 <Link
                   key={event.id}
@@ -82,23 +81,19 @@ export default function UpcomingEvents() {
                   </div>
                   <p className="text-sm text-gray-500 mb-4 line-clamp-2">{event.description}</p>
                   <div className="flex items-center justify-between text-sm">
-                    {event.meeting_address && (
+                    {event.meet_location_name && (
                       <span className="flex items-center gap-1 text-gray-400">
                         <MapPin className="w-4 h-4" />
-                        <span className="truncate max-w-[140px]">{event.meeting_address}</span>
+                        <span className="truncate max-w-[140px]">{event.meet_location_name}</span>
                       </span>
                     )}
-                    <span className="flex items-center gap-1 text-gray-400 ml-auto">
-                      <Users className="w-4 h-4" />
-                      {event.current_participants}
-                      {event.max_participants && `/${event.max_participants}`}
-                    </span>
+                    {event.capacity && (
+                      <span className="flex items-center gap-1 text-gray-400 ml-auto">
+                        <Users className="w-4 h-4" />
+                        {event.capacity}
+                      </span>
+                    )}
                   </div>
-                  {spotsLeft !== null && spotsLeft <= 5 && spotsLeft > 0 && (
-                    <div className="mt-3 text-xs font-medium text-orange-600 bg-orange-50 rounded-lg px-3 py-1.5 text-center">
-                      Зөвхөн {spotsLeft} суудал үлдсэн!
-                    </div>
-                  )}
                 </Link>
               );
             })}

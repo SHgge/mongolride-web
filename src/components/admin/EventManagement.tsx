@@ -2,19 +2,23 @@ import { useEffect, useState } from 'react';
 import { Edit2, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '../../lib/supabase';
-import type { Tables, EventStatus } from '../../types/database.types';
+import type { Tables } from '../../types/database.types';
 
 type Event = Tables<'events'>;
+type EventStatus = 'draft' | 'published' | 'cancelled' | 'completed';
 
 const STATUS_COLORS: Record<string, string> = {
-  upcoming: 'bg-blue-100 text-blue-700',
-  ongoing: 'bg-green-100 text-green-700',
-  completed: 'bg-gray-100 text-gray-600',
+  draft: 'bg-gray-100 text-gray-600',
+  published: 'bg-blue-100 text-blue-700',
   cancelled: 'bg-red-100 text-red-700',
+  completed: 'bg-green-100 text-green-700',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  upcoming: 'Удахгүй', ongoing: 'Явагдаж буй', completed: 'Дууссан', cancelled: 'Цуцлагдсан',
+  draft: 'Ноорог',
+  published: 'Нийтлэгдсэн',
+  cancelled: 'Цуцлагдсан',
+  completed: 'Дууссан',
 };
 
 export default function EventManagement() {
@@ -23,7 +27,7 @@ export default function EventManagement() {
   const [editingStatus, setEditingStatus] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.from('events').select('*').order('event_date', { ascending: false })
+    supabase.from('events').select('*').order('meet_at', { ascending: false })
       .then(({ data }) => { setEvents(data ?? []); setLoading(false); });
   }, []);
 
@@ -56,7 +60,7 @@ export default function EventManagement() {
             <tr className="border-b border-gray-100 bg-gray-50">
               <th className="text-left px-4 py-3 font-medium text-gray-500">Арга хэмжээ</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Огноо</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">Оролцогчид</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">Багтаамж</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">Төлөв</th>
             </tr>
           </thead>
@@ -74,14 +78,13 @@ export default function EventManagement() {
                 <tr key={event.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                   <td className="px-4 py-3">
                     <div className="font-medium text-gray-900">{event.title}</div>
-                    {event.meeting_address && <div className="text-xs text-gray-400">{event.meeting_address}</div>}
+                    {event.meet_location_name && <div className="text-xs text-gray-400">{event.meet_location_name}</div>}
                   </td>
                   <td className="px-4 py-3 text-gray-600 text-xs">
-                    {new Date(event.event_date).toLocaleDateString('mn-MN')}
+                    {new Date(event.meet_at).toLocaleDateString('mn-MN')}
                   </td>
                   <td className="px-4 py-3">
-                    <span className="text-gray-900 font-medium">{event.current_participants}</span>
-                    {event.max_participants && <span className="text-gray-400">/{event.max_participants}</span>}
+                    <span className="text-gray-900 font-medium">{event.capacity ?? '—'}</span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="relative">
@@ -91,7 +94,7 @@ export default function EventManagement() {
                       </button>
                       {editingStatus === event.id && (
                         <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10 min-w-[140px]">
-                          {(['upcoming', 'ongoing', 'completed', 'cancelled'] as EventStatus[]).map((s) => (
+                          {(['draft', 'published', 'cancelled', 'completed'] as EventStatus[]).map((s) => (
                             <button key={s} onClick={() => updateStatus(event.id, s)}
                               className={`block w-full text-left px-3 py-2 text-xs hover:bg-gray-50 ${STATUS_COLORS[s]} bg-transparent`}>
                               {STATUS_LABELS[s]}

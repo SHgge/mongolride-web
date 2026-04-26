@@ -7,9 +7,10 @@ type Event = Tables<'events'>;
 interface EventListProps {
   events: Event[];
   loading: boolean;
+  coverUrls?: Record<string, string>;
 }
 
-export default function EventList({ events, loading }: EventListProps) {
+export default function EventList({ events, loading, coverUrls = {} }: EventListProps) {
   if (loading) {
     return (
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -19,7 +20,6 @@ export default function EventList({ events, loading }: EventListProps) {
       </div>
     );
   }
-
   if (events.length === 0) {
     return (
       <div className="text-center py-20">
@@ -29,12 +29,9 @@ export default function EventList({ events, loading }: EventListProps) {
       </div>
     );
   }
-
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {events.map((event) => (
-        <EventCard key={event.id} event={event} />
-      ))}
+      {events.map((event) => <EventCard key={event.id} event={event} coverUrl={coverUrls[event.id] ?? null} />)}
     </div>
   );
 }

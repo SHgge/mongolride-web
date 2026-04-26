@@ -23,7 +23,7 @@ export default function Dashboard() {
       supabase.from('routes').select('*', { count: 'exact', head: true }),
       supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
       supabase.from('events').select('*', { count: 'exact', head: true }),
-      supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'upcoming'),
+      supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'published'),
       supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'active'),
     ]).then(([members, routes, pending, events, upcoming, listings]) => {
       setStats({
