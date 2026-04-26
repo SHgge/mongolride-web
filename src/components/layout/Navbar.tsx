@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { Menu, X, Bike, User, LogOut, Shield, Sun, Moon, UserPlus } from 'lucide-react';
+import { Menu, X, Bike, User, LogOut, Shield, Sun, Moon } from 'lucide-react';
 import { useTheme } from '../../contexts/ThemeContext';
 import NotificationDropdown from './NotificationDropdown';
 import GlobalSearch from './GlobalSearch';
@@ -16,7 +16,7 @@ const NAV_LINKS = [
 ];
 
 export default function Navbar() {
-  const { isAuthenticated, isAdmin, profile, signOut, role } = useAuth();
+  const { isAuthenticated, isAdmin, profile, signOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -77,11 +77,6 @@ export default function Navbar() {
                 >
                   {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
                 </button>
-                {role === 'guest' && (
-                  <Link to="/join" className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary-600 text-white text-xs font-medium rounded-lg hover:bg-primary-700 transition-colors">
-                    <UserPlus className="w-3.5 h-3.5" /> Клубт нэгдэх
-                  </Link>
-                )}
                 <NotificationDropdown />
                 <div className="relative" ref={dropdownRef}>
                   <button

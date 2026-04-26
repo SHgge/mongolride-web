@@ -23,13 +23,11 @@ import MarketplacePage from './pages/MarketplacePage';
 import ListingDetailPage from './pages/ListingDetailPage';
 import AddListingPage from './pages/AddListingPage';
 import ProfilePage from './pages/ProfilePage';
-import JoinPage from './pages/JoinPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import NewsPage from './pages/NewsPage';
 import NewsDetailPage from './pages/NewsDetailPage';
 import AdminDashboardPage from './pages/AdminDashboardPage';
 import AdminMembersPage from './pages/AdminMembersPage';
-import AdminMembershipRequestsPage from './pages/AdminMembershipRequestsPage';
 import AdminRoutesPage from './pages/AdminRoutesPage';
 import AdminEventsPage from './pages/AdminEventsPage';
 import AdminMarketPage from './pages/AdminMarketPage';
@@ -67,7 +65,6 @@ export default function App() {
                   <Route path="/routes/new" element={<AddRoutePage />} />
                   <Route path="/marketplace/new" element={<AddListingPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
-                  <Route path="/join" element={<JoinPage />} />
                 </Route>
 
                 <Route path="*" element={<NotFoundPage />} />
@@ -77,7 +74,6 @@ export default function App() {
                 <Route element={<AdminLayout />}>
                   <Route path="/admin" element={<AdminDashboardPage />} />
                   <Route path="/admin/members" element={<AdminMembersPage />} />
-                  <Route path="/admin/membership-requests" element={<AdminMembershipRequestsPage />} />
                   <Route path="/admin/routes" element={<AdminRoutesPage />} />
                   <Route path="/admin/events" element={<AdminEventsPage />} />
                   <Route path="/admin/marketplace" element={<AdminMarketPage />} />

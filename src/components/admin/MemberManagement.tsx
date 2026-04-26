@@ -12,7 +12,6 @@ type Profile = Tables<'profiles'>;
 const PAGE_SIZE = 50;
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string }> = {
-  guest: { label: 'Зочин', color: 'bg-gray-100 text-gray-600' },
   member: { label: 'Гишүүн', color: 'bg-blue-100 text-blue-700' },
   admin: { label: 'Админ', color: 'bg-red-100 text-red-700' },
 };
@@ -177,7 +176,7 @@ export default function MemberManagement() {
           />
         </div>
         <div className="flex gap-2">
-          {(['all', 'admin', 'member', 'guest'] as RoleFilter[]).map((r) => (
+          {(['all', 'admin', 'member'] as RoleFilter[]).map((r) => (
             <button
               key={r}
               onClick={() => setRoleFilter(r)}
@@ -259,7 +258,7 @@ export default function MemberManagement() {
                           </button>
                           {editingRole === member.id && (
                             <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg py-1 z-10 min-w-[140px]">
-                              {(['guest', 'member', 'admin'] as UserRole[]).map((r) => {
+                              {(['member', 'admin'] as UserRole[]).map((r) => {
                                 const disabled = isLastAdminCheck(member, r);
                                 return (
                                   <button

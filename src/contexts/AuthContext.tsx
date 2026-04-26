@@ -9,7 +9,7 @@ import {
 } from 'react';
 import toast from 'react-hot-toast';
 import type { Session, User as SupabaseUser } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
+import { supabase, supabasePublic } from '../lib/supabase';
 import type { Profile } from '../types/user.types';
 import type { UserRole } from '../types/database.types';
 
@@ -37,24 +37,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const user = session?.user ?? null;
   const role = profile?.role ?? null;
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const clearStaleSession = useCallback(async () => {
+    console.warn('[auth] Clearing stale session');
+    try { await supabase.auth.signOut(); } catch { /* ignore */ }
+    setSession(null);
+    setProfile(null);
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith('sb-')) localStorage.removeItem(key);
+    });
+  }, []);
+
+  const fetchProfile = useCallback(async (userId: string): Promise<boolean> => {
     try {
-      const { data, error: err } = await supabase
+      // Public client ашиглах — auth token-гүй тул RLS recursion болон auth-related
+      // hang-аас зайлсхийнэ. Profile нь public read RLS policy-той.
+      const { data, error: err } = await supabasePublic
         .from('profiles')
         .select('*')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
       if (err) {
-        console.error('Profile fetch error:', err.message);
+        console.error('[auth] Profile fetch error:', err.message);
         setProfile(null);
-      } else {
-        setProfile(data);
+        return false;
       }
-    } catch {
+
+      if (!data) {
+        console.warn('[auth] Profile not found for user', userId);
+        await clearStaleSession();
+        return false;
+      }
+
+      setProfile(data);
+      return true;
+    } catch (err) {
+      console.error('[auth] Profile fetch exception:', err);
       setProfile(null);
+      return false;
     }
-  }, []);
+  }, [clearStaleSession]);
 
   const refreshProfile = useCallback(async () => {
     if (user) await fetchProfile(user.id);

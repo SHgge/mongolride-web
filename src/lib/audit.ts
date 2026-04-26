@@ -38,6 +38,4 @@ export const AuditActions = {
   PASSWORD_CHANGED: 'password.changed',
   USER_DEACTIVATED: 'user.deactivated',
   USER_ACTIVATED: 'user.activated',
-  MEMBERSHIP_APPROVED: 'membership.approved',
-  MEMBERSHIP_REJECTED: 'membership.rejected',
 } as const;
