@@ -47,7 +47,7 @@ export default function StatsCounter() {
     Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_active', true),
       supabase.from('profiles').select('total_km'),
-      supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'approved'),
+      supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'published'),
     ]).then(([membersRes, kmRes, routesRes]) => {
       const totalMembers = membersRes.count ?? 0;
       const totalKm = (kmRes.data ?? []).reduce((sum, p) => sum + Number(p.total_km ?? 0), 0);

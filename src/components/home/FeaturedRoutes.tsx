@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, Mountain, ArrowRight, Star } from 'lucide-react';
+import { MapPin, Mountain, ArrowRight, Users } from 'lucide-react';
 import { supabasePublic as supabase } from '../../lib/supabase';
-import type { Tables } from '../../types/database.types';
+import type { Tables, RouteDifficultyLabel } from '../../types/database.types';
 
 type Route = Tables<'routes'>;
 
-const DIFFICULTY_LABELS: Record<number, { label: string; color: string }> = {
-  1: { label: 'Хялбар', color: 'bg-green-100 text-green-700' },
-  2: { label: 'Хөнгөн', color: 'bg-blue-100 text-blue-700' },
-  3: { label: 'Дунд', color: 'bg-yellow-100 text-yellow-700' },
-  4: { label: 'Хэцүү', color: 'bg-orange-100 text-orange-700' },
-  5: { label: 'Маш хэцүү', color: 'bg-red-100 text-red-700' },
+const DIFFICULTY_LABELS: Record<RouteDifficultyLabel, { label: string; color: string }> = {
+  easy:     { label: 'Хялбар',    color: 'bg-green-100 text-green-700' },
+  moderate: { label: 'Дунд',      color: 'bg-yellow-100 text-yellow-700' },
+  hard:     { label: 'Хэцүү',     color: 'bg-orange-100 text-orange-700' },
+  expert:   { label: 'Маш хэцүү', color: 'bg-red-100 text-red-700' },
 };
 
 export default function FeaturedRoutes() {
@@ -22,8 +21,9 @@ export default function FeaturedRoutes() {
     supabase
       .from('routes')
       .select('*')
-      .eq('status', 'approved')
-      .order('avg_rating', { ascending: false })
+      .eq('status', 'published')
+      .eq('visibility', 'public')
+      .order('completion_count', { ascending: false })
       .limit(3)
       .then(({ data }) => {
         setRoutes(data ?? []);
@@ -58,7 +58,9 @@ export default function FeaturedRoutes() {
         ) : (
           <div className="grid md:grid-cols-3 gap-6">
             {routes.map((route) => {
-              const diff = DIFFICULTY_LABELS[route.difficulty] ?? DIFFICULTY_LABELS[1];
+              const diff = route.difficulty_label
+                ? DIFFICULTY_LABELS[route.difficulty_label]
+                : DIFFICULTY_LABELS.moderate;
               return (
                 <Link
                   key={route.id}
@@ -66,8 +68,8 @@ export default function FeaturedRoutes() {
                   className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg hover:border-gray-200 transition-all duration-300"
                 >
                   <div className="h-48 bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center relative">
-                    {route.images?.[0] ? (
-                      <img src={route.images[0]} alt={route.title} className="w-full h-full object-cover" />
+                    {route.cover_photo_path ? (
+                      <img src={route.cover_photo_path} alt={route.title} className="w-full h-full object-cover" />
                     ) : (
                       <MapPin className="w-12 h-12 text-primary-300" />
                     )}
@@ -83,15 +85,15 @@ export default function FeaturedRoutes() {
                     <div className="flex items-center justify-between text-sm">
                       <div className="flex items-center gap-4 text-gray-400">
                         <span className="flex items-center gap-1">
-                          <MapPin className="w-4 h-4" /> {route.distance_km} км
+                          <MapPin className="w-4 h-4" /> {Number(route.distance_km).toFixed(1)} км
                         </span>
                         <span className="flex items-center gap-1">
-                          <Mountain className="w-4 h-4" /> {route.elevation_gain} м
+                          <Mountain className="w-4 h-4" /> {route.elevation_gain_m} м
                         </span>
                       </div>
-                      {route.avg_rating > 0 && (
-                        <span className="flex items-center gap-1 text-yellow-500 font-medium">
-                          <Star className="w-4 h-4 fill-current" /> {Number(route.avg_rating).toFixed(1)}
+                      {route.completion_count > 0 && (
+                        <span className="flex items-center gap-1 text-primary-600 font-medium">
+                          <Users className="w-4 h-4" /> {route.completion_count}
                         </span>
                       )}
                     </div>

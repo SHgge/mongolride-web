@@ -375,6 +375,12 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# download-clean-gpx is publicly callable so plain <a href> links work.
+# RLS is still enforced inside the function (the user client respects whatever
+# Authorization header was sent, falling back to anon for public routes).
+[functions.download-clean-gpx]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

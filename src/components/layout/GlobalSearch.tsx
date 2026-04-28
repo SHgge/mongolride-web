@@ -61,7 +61,7 @@ export default function GlobalSearch() {
       const q = `%${query}%`;
 
       const [routesRes, eventsRes, listingsRes, newsRes] = await Promise.all([
-        supabase.from('routes').select('id, title, description').eq('status', 'approved').ilike('title', q).limit(3),
+        supabase.from('routes').select('id, title, description').eq('status', 'published').ilike('title', q).limit(3),
         supabase.from('events').select('id, title, description').ilike('title', q).limit(3),
         supabase.from('listings').select('id, title, description').eq('status', 'active').ilike('title', q).limit(3),
         supabase.from('news').select('id, title, excerpt, slug').eq('is_published', true).ilike('title', q).limit(3),

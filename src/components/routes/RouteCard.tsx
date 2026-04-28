@@ -1,30 +1,28 @@
 import { Link } from 'react-router-dom';
-import { MapPin, Mountain, Star, ArrowUpRight } from 'lucide-react';
-import type { Tables } from '../../types/database.types';
+import { MapPin, Mountain, ArrowUpRight, Users } from 'lucide-react';
+import type { Tables, RouteDifficultyLabel } from '../../types/database.types';
 import SurfaceRating from './SurfaceRating';
 
 type Route = Tables<'routes'>;
 
-const DIFFICULTY: Record<number, { label: string; color: string }> = {
-  1: { label: 'Хялбар', color: 'bg-green-100 text-green-700' },
-  2: { label: 'Хөнгөн', color: 'bg-blue-100 text-blue-700' },
-  3: { label: 'Дунд', color: 'bg-yellow-100 text-yellow-700' },
-  4: { label: 'Хэцүү', color: 'bg-orange-100 text-orange-700' },
-  5: { label: 'Маш хэцүү', color: 'bg-red-100 text-red-700' },
+const DIFFICULTY: Record<RouteDifficultyLabel, { label: string; color: string }> = {
+  easy:     { label: 'Хялбар',    color: 'bg-green-100 text-green-700' },
+  moderate: { label: 'Дунд',      color: 'bg-yellow-100 text-yellow-700' },
+  hard:     { label: 'Хэцүү',     color: 'bg-orange-100 text-orange-700' },
+  expert:   { label: 'Маш хэцүү', color: 'bg-red-100 text-red-700' },
 };
 
 export default function RouteCard({ route }: { route: Route }) {
-  const diff = DIFFICULTY[route.difficulty] ?? DIFFICULTY[1];
+  const diff = route.difficulty_label ? DIFFICULTY[route.difficulty_label] : DIFFICULTY.moderate;
 
   return (
     <Link
       to={`/routes/${route.id}`}
       className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:shadow-lg hover:border-gray-200 transition-all duration-300"
     >
-      {/* Image */}
       <div className="h-44 bg-gradient-to-br from-primary-100 to-primary-50 relative overflow-hidden">
-        {route.images?.[0] ? (
-          <img src={route.images[0]} alt={route.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        {route.cover_photo_path ? (
+          <img src={route.cover_photo_path} alt={route.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
         ) : (
           <div className="flex items-center justify-center h-full">
             <MapPin className="w-10 h-10 text-primary-300" />
@@ -38,31 +36,28 @@ export default function RouteCard({ route }: { route: Route }) {
         </div>
       </div>
 
-      {/* Content */}
       <div className="p-5">
         <h3 className="text-lg font-semibold text-gray-900 mb-1 group-hover:text-primary-600 transition-colors">
           {route.title}
         </h3>
         <p className="text-sm text-gray-500 mb-3 line-clamp-2">{route.description}</p>
 
-        {/* Surface tags */}
         <div className="mb-3">
-          <SurfaceRating surfaces={route.surface} />
+          <SurfaceRating breakdown={route.surface_breakdown} />
         </div>
 
-        {/* Stats */}
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-4 text-gray-400">
             <span className="flex items-center gap-1">
-              <MapPin className="w-4 h-4" /> {route.distance_km} км
+              <MapPin className="w-4 h-4" /> {Number(route.distance_km).toFixed(1)} км
             </span>
             <span className="flex items-center gap-1">
-              <Mountain className="w-4 h-4" /> {route.elevation_gain} м
+              <Mountain className="w-4 h-4" /> {route.elevation_gain_m} м
             </span>
           </div>
-          {route.avg_rating > 0 && (
-            <span className="flex items-center gap-1 text-yellow-500 font-medium">
-              <Star className="w-4 h-4 fill-current" /> {Number(route.avg_rating).toFixed(1)}
+          {route.completion_count > 0 && (
+            <span className="flex items-center gap-1 text-primary-600 font-medium">
+              <Users className="w-4 h-4" /> {route.completion_count}
             </span>
           )}
         </div>

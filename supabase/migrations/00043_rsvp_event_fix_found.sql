@@ -1,0 +1,173 @@
+-- ============================================================
+-- EP-04 P1-5 fix: rsvp_event-ийн `FOUND` хувьсагчийн bug-ыг засах.
+--
+-- PL/pgSQL-д FOUND нь сүүлийн SQL statement бүрд шинэчлэгддэг. Capacity
+-- шалгалтын aggregate `select coalesce(sum(...), 0)` үргэлж 1 row буцаадаг
+-- тул FOUND=true болгож, дараах `if found then UPDATE ...` нь буруу
+-- branch-руу орж байсан. Шинэ хэрэглэгч RSVP хийхэд UPDATE 0 row дэвүүлж,
+-- INSERT огт ажилладаггүй. Тиймээс toast амжилттай гарсан ч DB-д row үүсээгүй.
+--
+-- Засаас: тусгай `v_has_existing` boolean хувьсагчаар found-ыг хадгалж,
+-- бусад статистик query-уудаас хамаарахгүй болгоно.
+-- ============================================================
+
+drop function if exists public.rsvp_event(uuid, integer, text, text, boolean, boolean, text, uuid);
+
+create or replace function public.rsvp_event(
+  p_event_id          uuid,
+  p_guest_count       integer default 0,
+  p_emergency_name    text default null,
+  p_emergency_phone   text default null,
+  p_liability_ack     boolean default false,
+  p_gear_confirmed    boolean default false,
+  p_notes             text default null,
+  p_selected_route_id uuid default null
+) returns table (
+  rsvp_id           uuid,
+  rsvp_status       text,
+  waitlist_position integer
+)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_event              record;
+  v_user_role          text;
+  v_seat_count         integer;
+  v_existing_rsvp      record;
+  v_has_existing       boolean := false;
+  v_confirmed_seats    integer;
+  v_next_waitlist_pos  integer;
+  v_new_status         text;
+  v_new_waitlist_pos   integer;
+  v_rsvp_id            uuid;
+  v_route_count        integer;
+  v_route_valid        boolean;
+begin
+  if auth.uid() is null then
+    raise exception 'Must be signed in' using errcode = 'P0001';
+  end if;
+
+  if not p_liability_ack then
+    raise exception 'Liability acknowledgment required' using errcode = 'P0010';
+  end if;
+  if not p_gear_confirmed then
+    raise exception 'Gear confirmation required' using errcode = 'P0011';
+  end if;
+  if p_emergency_name is null or trim(p_emergency_name) = ''
+     or p_emergency_phone is null or trim(p_emergency_phone) = '' then
+    raise exception 'Emergency contact required' using errcode = 'P0012';
+  end if;
+
+  select * into v_event
+  from public.events e
+  where e.id = p_event_id and e.status = 'published'
+  for update;
+
+  if not found then
+    raise exception 'Event not found or not published' using errcode = 'P0002';
+  end if;
+
+  select p.role into v_user_role from public.profiles p where p.id = auth.uid();
+  if v_event.visibility = 'members' and coalesce(v_user_role, '') not in ('member','admin') then
+    raise exception 'This event is members-only' using errcode = 'P0013';
+  end if;
+
+  if p_guest_count > 0 and not v_event.allow_guests then
+    raise exception 'Guests not allowed' using errcode = 'P0014';
+  end if;
+  if p_guest_count > v_event.max_guests_per_member then
+    raise exception 'Too many guests (max %)', v_event.max_guests_per_member
+      using errcode = 'P0015';
+  end if;
+
+  -- Route validation
+  select count(*) into v_route_count
+    from public.event_routes er where er.event_id = p_event_id;
+
+  if v_route_count > 0 then
+    if p_selected_route_id is not null then
+      select exists (
+        select 1 from public.event_routes er
+        where er.event_id = p_event_id and er.route_id = p_selected_route_id
+      ) into v_route_valid;
+      if not v_route_valid then
+        raise exception 'Selected route is not part of this event' using errcode = 'P0018';
+      end if;
+    end if;
+  else
+    if p_selected_route_id is not null then
+      raise exception 'This event has no route options' using errcode = 'P0019';
+    end if;
+  end if;
+
+  v_seat_count := 1 + p_guest_count;
+
+  -- Existing RSVP-ийг хайж олох. FOUND-ыг тусдаа boolean-д хадгалж,
+  -- доорх aggregate query-ууд дарахгүй болгоно.
+  select * into v_existing_rsvp
+  from public.event_rsvps r
+  where r.event_id = p_event_id and r.user_id = auth.uid()
+  for update;
+  v_has_existing := found;
+
+  if v_has_existing and v_existing_rsvp.status in ('confirmed','waitlist','pending_payment') then
+    raise exception 'You already have an active RSVP' using errcode = 'P0016';
+  end if;
+
+  if v_event.capacity is not null then
+    select coalesce(sum(1 + r.guest_count), 0) into v_confirmed_seats
+    from public.event_rsvps r
+    where r.event_id = p_event_id and r.status = 'confirmed';
+
+    if v_confirmed_seats + v_seat_count <= v_event.capacity then
+      v_new_status := case when v_event.fee_amount > 0 then 'pending_payment' else 'confirmed' end;
+      v_new_waitlist_pos := null;
+    else
+      v_new_status := 'waitlist';
+      select coalesce(max(r.waitlist_position), 0) + 1 into v_next_waitlist_pos
+      from public.event_rsvps r where r.event_id = p_event_id;
+      v_new_waitlist_pos := v_next_waitlist_pos;
+    end if;
+  else
+    v_new_status := case when v_event.fee_amount > 0 then 'pending_payment' else 'confirmed' end;
+    v_new_waitlist_pos := null;
+  end if;
+
+  if v_has_existing then
+    update public.event_rsvps r
+       set status = v_new_status,
+           waitlist_position = v_new_waitlist_pos,
+           guest_count = p_guest_count,
+           liability_accepted_at = now(),
+           gear_confirmed_at = now(),
+           emergency_contact_name = p_emergency_name,
+           emergency_contact_phone = p_emergency_phone,
+           notes = p_notes,
+           selected_route_id = p_selected_route_id,
+           cancelled_at = null,
+           cancellation_reason = null,
+           updated_at = now()
+     where r.id = v_existing_rsvp.id
+     returning r.id into v_rsvp_id;
+  else
+    insert into public.event_rsvps (
+      event_id, user_id, status, waitlist_position, guest_count,
+      liability_accepted_at, gear_confirmed_at,
+      emergency_contact_name, emergency_contact_phone, notes,
+      selected_route_id
+    ) values (
+      p_event_id, auth.uid(), v_new_status, v_new_waitlist_pos, p_guest_count,
+      now(), now(), p_emergency_name, p_emergency_phone, p_notes,
+      p_selected_route_id
+    ) returning id into v_rsvp_id;
+  end if;
+
+  return query select v_rsvp_id, v_new_status, v_new_waitlist_pos;
+end;
+$$;
+
+grant execute on function public.rsvp_event(
+  uuid, integer, text, text, boolean, boolean, text, uuid
+) to authenticated;

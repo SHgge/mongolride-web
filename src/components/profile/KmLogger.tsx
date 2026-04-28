@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase';
 import { useAuth } from '../../hooks/useAuth';
 import type { Tables } from '../../types/database.types';
 
-type RouteOption = Pick<Tables<'routes'>, 'id' | 'title' | 'distance_km' | 'elevation_gain'>;
+type RouteOption = Pick<Tables<'routes'>, 'id' | 'title' | 'distance_km' | 'elevation_gain_m'>;
 
 interface KmInput {
   distance_km: number;
@@ -56,8 +56,8 @@ export default function KmLogger({ onLogged }: KmLoggerProps) {
   useEffect(() => {
     supabase
       .from('routes')
-      .select('id, title, distance_km, elevation_gain')
-      .eq('status', 'approved')
+      .select('id, title, distance_km, elevation_gain_m')
+      .eq('status', 'published')
       .order('title')
       .then(({ data }) => setRoutes(data ?? []));
   }, []);
@@ -68,8 +68,8 @@ export default function KmLogger({ onLogged }: KmLoggerProps) {
     if (routeId) {
       const route = routes.find((r) => r.id === routeId);
       if (route) {
-        setValue('distance_km', route.distance_km);
-        setValue('elevation_gain', route.elevation_gain);
+        setValue('distance_km', Number(route.distance_km));
+        setValue('elevation_gain', route.elevation_gain_m);
       }
     }
   };

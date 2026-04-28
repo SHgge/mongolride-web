@@ -60,6 +60,7 @@ export default function RouteMap({ routes, selectedRouteId, onRouteSelect, class
       const lng = 106.9177 + (i * 0.03) - 0.06;
       const isSelected = selectedRouteId === route.id;
 
+      const diffInitial = (route.difficulty_label ?? 'm')[0].toUpperCase();
       const icon = L.divIcon({
         html: `<div style="
           width: ${isSelected ? '32px' : '24px'};
@@ -74,7 +75,7 @@ export default function RouteMap({ routes, selectedRouteId, onRouteSelect, class
           color: white;
           font-size: 10px;
           font-weight: bold;
-        ">${route.difficulty}</div>`,
+        ">${diffInitial}</div>`,
         className: '',
         iconSize: [isSelected ? 32 : 24, isSelected ? 32 : 24],
         iconAnchor: [isSelected ? 16 : 12, isSelected ? 16 : 12],
@@ -86,10 +87,10 @@ export default function RouteMap({ routes, selectedRouteId, onRouteSelect, class
         <div style="min-width: 180px">
           <strong style="font-size: 14px">${route.title}</strong>
           <div style="color: #666; font-size: 12px; margin-top: 4px">
-            ${route.distance_km} км · ${route.elevation_gain} м өндөршил
+            ${route.distance_km} км · ${route.elevation_gain_m} м өндөршил
           </div>
           <div style="color: #888; font-size: 11px; margin-top: 2px">
-            Үнэлгээ: ${Number(route.avg_rating).toFixed(1)} ★
+            ${route.completion_count} удаа давсан
           </div>
         </div>
       `);

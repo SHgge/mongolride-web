@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { ImageUpload } from '../common';
 import { logAudit } from '../../lib/audit';
 import { diffKeys, shouldNotifyParticipants } from '../../lib/eventDiff';
+import EventRoutesEditor from './EventRoutesEditor';
 
 const DISCIPLINES = [
   { value: 'road', label: 'Зам' },
@@ -113,9 +114,11 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
     if (!eventId) return;
     let active = true;
     (async () => {
-      type EventSelectFn = () => { eq: (col: string, val: string) => { single: () => Promise<{ data: Record<string, unknown> | null; error: { message: string } | null }> } };
-      const selectFn = (supabase.from('events').select as unknown) as (cols: string) => ReturnType<EventSelectFn>;
-      const { data, error } = await selectFn('*').eq('id', eventId).single();
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .single();
       if (!active) return;
       if (error || !data) {
         toast.error('Эвент олдсонгүй');
@@ -196,15 +199,32 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
       toast.error('Гарчиг, цаг, газар шаардлагатай');
       return;
     }
+    // DB constraints: roll_out_at >= meet_at, end_at >= roll_out_at
+    const meetMs    = new Date(meetAt).getTime();
+    const rollOutMs = new Date(rollOutAt).getTime();
+    const endMs     = endAt ? new Date(endAt).getTime() : null;
+    if (Number.isNaN(meetMs) || Number.isNaN(rollOutMs)) {
+      toast.error('Цагийн формат буруу байна');
+      return;
+    }
+    if (rollOutMs < meetMs) {
+      toast.error('Хөдлөх цаг нь уулзах цагаас өмнө байж болохгүй');
+      return;
+    }
+    if (endMs != null && endMs < rollOutMs) {
+      toast.error('Дуусах цаг нь хөдлөх цагаас өмнө байж болохгүй');
+      return;
+    }
     setSubmitting(true);
 
-    type EventInsert = Record<string, unknown>;
     const payload = buildPayload();
 
     if (isEdit && eventId) {
       // UPDATE branch
-      const updateFn = (supabase.from('events').update as unknown) as (d: EventInsert) => { eq: (col: string, val: string) => Promise<{ error: { message: string } | null }> };
-      const { error } = await updateFn(payload).eq('id', eventId);
+      const { error } = await supabase
+        .from('events')
+        .update(payload as never)
+        .eq('id', eventId);
       if (error) {
         toast.error(error.message ?? 'Хадгалахад алдаа гарлаа');
         setSubmitting(false);
@@ -240,13 +260,16 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
     }
 
     // CREATE branch
-    const insertPayload: EventInsert = {
+    const insertPayload = {
       ...payload,
       status: statusToSave,
       organizer_id: user.id,
     };
-    const insertFn = (supabase.from('events').insert as unknown) as (d: EventInsert) => { select: () => { single: () => Promise<{ data: { id: string } | null; error: { message: string } | null }> } };
-    const { data, error } = await insertFn(insertPayload).select().single();
+    const { data, error } = await supabase
+      .from('events')
+      .insert(insertPayload as never)
+      .select()
+      .single();
 
     if (error) {
       toast.error(error.message ?? 'Алдаа гарлаа');
@@ -255,7 +278,7 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
     }
 
     toast.success(statusToSave === 'published' ? 'Нийтлэгдлээ' : 'Хадгалагдлаа');
-    await logAudit('event.created', data?.id, { title: insertPayload.title, status: statusToSave });
+    await logAudit('event.created', data?.id, { title: title.trim(), status: statusToSave });
     setSubmitting(false);
     onSaved();
   };
@@ -300,14 +323,10 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
     if (!confirm('Энэ эвентийг "Дууссан" төлөвт оруулах уу?')) return;
     setCompleting(true);
     try {
-      const rpcFn = (supabase.rpc as unknown) as (
-        fn: string,
-        args: Record<string, unknown>,
-      ) => Promise<{ error: { message: string } | null }>;
-      const { error } = await rpcFn('change_event_status', {
+      const { error } = await supabase.rpc('change_event_status' as never, {
         p_event_id: eventId,
         p_new_status: 'completed',
-      });
+      } as never);
       if (error) {
         toast.error(error.message ?? 'Алдаа гарлаа');
         setCompleting(false);
@@ -399,17 +418,34 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Уулзах *</label>
-                <input type="datetime-local" value={meetAt} onChange={(e) => setMeetAt(e.target.value)}
+                <input type="datetime-local" value={meetAt}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setMeetAt(v);
+                    // Roll-out auto-suggest if empty or earlier than the new meet time
+                    if (v && (!rollOutAt || rollOutAt < v)) {
+                      // Default rollOut = meet + 15 minutes
+                      const dt = new Date(v);
+                      dt.setMinutes(dt.getMinutes() + 15);
+                      const pad = (n: number) => String(n).padStart(2, '0');
+                      setRollOutAt(
+                        `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`,
+                      );
+                    }
+                  }}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Хөдлөх *</label>
-                <input type="datetime-local" value={rollOutAt} onChange={(e) => setRollOutAt(e.target.value)}
+                <input type="datetime-local" value={rollOutAt}
+                  onChange={(e) => setRollOutAt(e.target.value)}
+                  min={meetAt || undefined}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm" />
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Дуусах</label>
                 <input type="datetime-local" value={endAt} onChange={(e) => setEndAt(e.target.value)}
+                  min={rollOutAt || meetAt || undefined}
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm" />
               </div>
             </div>
@@ -472,6 +508,12 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
                   className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm" />
               </div>
             </div>
+          </fieldset>
+
+          {/* Routes (multi-route picker source) */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-gray-900 mb-2">Маршрут</legend>
+            <EventRoutesEditor eventId={eventId} />
           </fieldset>
 
           {/* Gear & support */}

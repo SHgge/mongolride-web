@@ -1,5 +1,6 @@
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { useState } from 'react';
+import type { RouteDifficultyLabel } from '../../types/database.types';
 
 interface RouteFilterProps {
   onFilterChange: (filters: FilterState) => void;
@@ -7,31 +8,28 @@ interface RouteFilterProps {
 
 export interface FilterState {
   search: string;
-  difficulty: number | null;
-  surface: string | null;
-  sortBy: 'newest' | 'distance' | 'rating' | 'elevation';
+  difficulty: RouteDifficultyLabel | null;
+  surface: 'asphalt' | 'gravel' | 'dirt' | null;
+  sortBy: 'newest' | 'distance' | 'completions' | 'elevation';
 }
 
-const DIFFICULTIES = [
-  { value: 1, label: 'Хялбар' },
-  { value: 2, label: 'Хөнгөн' },
-  { value: 3, label: 'Дунд' },
-  { value: 4, label: 'Хэцүү' },
-  { value: 5, label: 'Маш хэцүү' },
+const DIFFICULTIES: Array<{ value: RouteDifficultyLabel; label: string }> = [
+  { value: 'easy',     label: 'Хялбар' },
+  { value: 'moderate', label: 'Дунд' },
+  { value: 'hard',     label: 'Хэцүү' },
+  { value: 'expert',   label: 'Маш хэцүү' },
 ];
 
-const SURFACES = [
+const SURFACES: Array<{ value: 'asphalt' | 'gravel' | 'dirt'; label: string }> = [
   { value: 'asphalt', label: 'Асфальт' },
-  { value: 'dirt', label: 'Шороо' },
-  { value: 'gravel', label: 'Хайрга' },
-  { value: 'ice', label: 'Мөс' },
-  { value: 'mixed', label: 'Холимог' },
+  { value: 'gravel',  label: 'Хайрга' },
+  { value: 'dirt',    label: 'Шороо' },
 ];
 
 const SORT_OPTIONS = [
   { value: 'newest', label: 'Шинэ' },
   { value: 'distance', label: 'Зай' },
-  { value: 'rating', label: 'Үнэлгээ' },
+  { value: 'completions', label: 'Туулсан тоо' },
   { value: 'elevation', label: 'Өндөршил' },
 ];
 

@@ -2,8 +2,51 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 
 export type UserRole = 'member' | 'admin';
 export type UserRank = 'unaga' | 'daagan' | 'shudlen' | 'khuleg' | 'avarga';
-export type SurfaceType = 'asphalt' | 'dirt' | 'gravel' | 'ice' | 'mixed';
-export type RouteStatus = 'pending' | 'approved' | 'rejected';
+export type SurfaceType = 'asphalt' | 'gravel' | 'dirt';
+export type RouteStatus = 'draft' | 'published' | 'archived';
+export type RouteVisibility = 'public' | 'members' | 'private';
+export type RouteDifficultyLabel = 'easy' | 'moderate' | 'hard' | 'expert';
+export type RouteLoopType = 'loop' | 'out_and_back' | 'point_to_point';
+export type RouteDiscipline = 'road' | 'mtb' | 'gravel' | 'urban' | 'commute' | 'bikepacking' | 'training' | 'other';
+
+export interface RouteClimb {
+  start_km: number;
+  end_km: number;
+  length_km: number;
+  gain_m: number;
+  avg_grade: number;
+  max_grade: number;
+  category: 'HC' | '1' | '2' | '3' | '4';
+}
+
+export interface RouteSurfaceBreakdown {
+  asphalt?: number;
+  gravel?: number;
+  dirt?: number;
+}
+
+export interface ElevationPoint {
+  km: number;
+  ele: number;
+}
+
+export type CueType =
+  | 'start'
+  | 'end'
+  | 'left'
+  | 'right'
+  | 'sharp_left'
+  | 'sharp_right'
+  | 'slight_left'
+  | 'slight_right'
+  | 'u_turn';
+
+export interface CueEntry {
+  km: number;
+  type: CueType;
+  segment_distance_m: number;
+  bearing_change: number;
+}
 export type EventStatus = 'draft' | 'published' | 'cancelled' | 'completed';
 export type ListingCategory = 'bike' | 'parts' | 'clothing' | 'accessories' | 'other';
 export type ListingCondition = 'new' | 'like_new' | 'used' | 'for_parts';
@@ -76,78 +119,145 @@ export interface Database {
         Row: {
           id: string;
           title: string;
-          description: string | null;
+          description: string;
+          // PostGIS — string representation in SELECT (we hydrate via RPCs for geometry)
+          path: unknown;
+          start_point: unknown | null;
+          end_point: unknown | null;
+          bbox_geog: unknown | null;
           distance_km: number;
-          elevation_gain: number;
-          difficulty: number;
-          surface: SurfaceType[];
-          start_point: string | null;
-          end_point: string | null;
-          route_line: string | null;
-          gpx_url: string | null;
-          images: string[];
+          elevation_gain_m: number;
+          elevation_loss_m: number;
+          max_elevation_m: number | null;
+          min_elevation_m: number | null;
+          avg_grade_pct: number | null;
+          max_grade_pct: number | null;
+          climbs: RouteClimb[];
+          elevation_profile: ElevationPoint[];
+          cue_sheet: CueEntry[];
+          surface_breakdown: RouteSurfaceBreakdown;
+          surface_classified_at: string | null;
+          difficulty_score: number | null;
+          difficulty_label: RouteDifficultyLabel | null;
+          discipline: RouteDiscipline;
+          loop_type: RouteLoopType | null;
+          gpx_path: string | null;
+          cleaned_gpx_path: string | null;
+          cover_photo_path: string | null;
+          region: string | null;
+          country: string;
+          visibility: RouteVisibility;
           status: RouteStatus;
-          avg_rating: number;
-          rating_count: number;
-          created_by: string | null;
+          created_by: string;
+          completion_count: number;
+          photo_count: number;
           created_at: string;
           updated_at: string;
         };
         Insert: {
           title: string;
+          path: string;
           distance_km: number;
-          description?: string | null;
-          elevation_gain?: number;
-          difficulty?: number;
-          surface?: SurfaceType[];
-          start_point?: string | null;
-          end_point?: string | null;
-          route_line?: string | null;
-          gpx_url?: string | null;
-          images?: string[];
+          discipline: RouteDiscipline;
+          created_by: string;
+          description?: string;
+          elevation_gain_m?: number;
+          elevation_loss_m?: number;
+          max_elevation_m?: number | null;
+          min_elevation_m?: number | null;
+          avg_grade_pct?: number | null;
+          max_grade_pct?: number | null;
+          climbs?: RouteClimb[];
+          elevation_profile?: ElevationPoint[];
+          cue_sheet?: CueEntry[];
+          surface_breakdown?: RouteSurfaceBreakdown;
+          difficulty_score?: number | null;
+          difficulty_label?: RouteDifficultyLabel | null;
+          loop_type?: RouteLoopType | null;
+          gpx_path?: string | null;
+          cleaned_gpx_path?: string | null;
+          cover_photo_path?: string | null;
+          region?: string | null;
+          country?: string;
+          visibility?: RouteVisibility;
           status?: RouteStatus;
-          created_by?: string | null;
         };
-        Update: {
-          title?: string;
-          distance_km?: number;
-          description?: string | null;
-          elevation_gain?: number;
-          difficulty?: number;
-          surface?: SurfaceType[];
-          start_point?: string | null;
-          end_point?: string | null;
-          route_line?: string | null;
-          gpx_url?: string | null;
-          images?: string[];
+        Update: Partial<Database['public']['Tables']['routes']['Insert']> & {
           status?: RouteStatus;
-          created_by?: string | null;
-          avg_rating?: number;
-          rating_count?: number;
+          surface_classified_at?: string | null;
+          completion_count?: number;
+          photo_count?: number;
         };
         Relationships: [];
       };
-      route_ratings: {
+      route_completions: {
         Row: {
           id: string;
           route_id: string;
           user_id: string;
-          rating: number;
-          comment: string | null;
+          event_id: string | null;
+          ridden_at: string;
+          duration_seconds: number | null;
+          avg_speed_kmh: number | null;
+          notes: string | null;
+          rating: number | null;
+          ride_gpx_path: string | null;
           created_at: string;
         };
         Insert: {
           route_id: string;
           user_id: string;
-          rating: number;
-          comment?: string | null;
+          ridden_at: string;
+          event_id?: string | null;
+          duration_seconds?: number | null;
+          avg_speed_kmh?: number | null;
+          notes?: string | null;
+          rating?: number | null;
+          ride_gpx_path?: string | null;
         };
-        Update: {
-          route_id?: string;
-          user_id?: string;
-          rating?: number;
-          comment?: string | null;
+        Update: Partial<Database['public']['Tables']['route_completions']['Insert']>;
+        Relationships: [];
+      };
+      route_photos: {
+        Row: {
+          id: string;
+          route_id: string;
+          uploaded_by: string;
+          photo_path: string;
+          caption: string | null;
+          km_marker: number | null;
+          taken_at: string | null;
+          created_at: string;
         };
+        Insert: {
+          route_id: string;
+          uploaded_by: string;
+          photo_path: string;
+          caption?: string | null;
+          km_marker?: number | null;
+          taken_at?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['route_photos']['Insert']>;
+        Relationships: [];
+      };
+      event_routes: {
+        Row: {
+          id: string;
+          event_id: string;
+          route_id: string;
+          is_primary: boolean;
+          display_order: number;
+          label: string | null;
+          created_at: string;
+        };
+        Insert: {
+          event_id: string;
+          route_id: string;
+          is_primary?: boolean;
+          display_order?: number;
+          label?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['event_routes']['Insert']>;
         Relationships: [];
       };
       events: {
@@ -256,6 +366,7 @@ export interface Database {
           cancellation_reason: string | null;
           checked_in_at: string | null;
           check_in_token: string;
+          selected_route_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -263,11 +374,13 @@ export interface Database {
           event_id: string;
           user_id: string;
           status: string;
+          selected_route_id?: string | null;
         };
         Update: {
           status?: string;
           checked_in_at?: string | null;
           notes?: string | null;
+          selected_route_id?: string | null;
         };
         Relationships: [];
       };

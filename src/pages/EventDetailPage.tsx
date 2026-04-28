@@ -7,11 +7,23 @@ import {
 } from 'lucide-react';
 import { supabase, supabasePublic } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
-import type { Tables } from '../types/database.types';
+import type { Tables, RouteDifficultyLabel } from '../types/database.types';
 import { Loader } from '../components/common';
 
 type Event = Tables<'events'>;
 type Rsvp = Tables<'event_rsvps'>;
+
+interface EventRouteOption {
+  id: string;
+  route_id: string;
+  is_primary: boolean;
+  display_order: number;
+  label: string | null;
+  title: string;
+  distance_km: number;
+  elevation_gain_m: number;
+  difficulty_label: RouteDifficultyLabel | null;
+}
 
 const DISCIPLINE_LABELS: Record<string, string> = {
   road: 'Зам', mtb: 'Уулын', gravel: 'Хайрга', urban: 'Хотын',
@@ -63,6 +75,10 @@ export default function EventDetailPage() {
   const [rsvpNotes, setRsvpNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  // Multi-route picker (P1-5)
+  const [eventRoutes, setEventRoutes] = useState<EventRouteOption[]>([]);
+  const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+
   // Fetch event
   useEffect(() => {
     if (!id) return;
@@ -70,17 +86,22 @@ export default function EventDetailPage() {
       .then(({ data }) => { setEvent(data); setLoading(false); });
   }, [id]);
 
-  // Fetch counts + my RSVP
+  // Fetch counts + my RSVP. Counts come from a security-definer RPC because
+  // event_rsvps RLS doesn't expose rows to anon/non-organizer members.
   const refreshRsvps = useCallback(async () => {
     if (!id) return;
-    const { count: confirmed } = await supabasePublic.from('event_rsvps')
-      .select('*', { count: 'exact', head: true })
-      .eq('event_id', id).eq('status', 'confirmed');
-    const { count: wait } = await supabasePublic.from('event_rsvps')
-      .select('*', { count: 'exact', head: true })
-      .eq('event_id', id).eq('status', 'waitlist');
-    setConfirmedCount(confirmed ?? 0);
-    setWaitlistCount(wait ?? 0);
+    const { data: counts, error: countErr } = await supabasePublic
+      .rpc('event_rsvp_counts' as never, { p_event_id: id } as never);
+    if (countErr) {
+      console.error('[event_rsvp_counts]', countErr.message);
+    }
+    // RPC may return either an array (RETURNS TABLE → JSON array) or a single
+    // object depending on PostgREST version. Handle both.
+    const row = Array.isArray(counts)
+      ? (counts[0] as { confirmed_count?: number; waitlist_count?: number } | undefined)
+      : (counts as { confirmed_count?: number; waitlist_count?: number } | null);
+    setConfirmedCount(row?.confirmed_count ?? 0);
+    setWaitlistCount(row?.waitlist_count ?? 0);
 
     if (user) {
       const { data } = await supabase.from('event_rsvps')
@@ -90,6 +111,37 @@ export default function EventDetailPage() {
   }, [id, user]);
 
   useEffect(() => { refreshRsvps(); }, [refreshRsvps]);
+
+  // Fetch routes attached to this event (P1-5)
+  useEffect(() => {
+    if (!id) return;
+    let active = true;
+    supabasePublic
+      .from('event_routes')
+      .select('id, route_id, is_primary, display_order, label, routes(title, distance_km, elevation_gain_m, difficulty_label)')
+      .eq('event_id', id)
+      .order('display_order', { ascending: true })
+      .then(({ data }) => {
+        if (!active) return;
+        type Row = {
+          id: string; route_id: string; is_primary: boolean; display_order: number; label: string | null;
+          routes: { title: string; distance_km: number; elevation_gain_m: number; difficulty_label: RouteDifficultyLabel | null } | null;
+        };
+        const opts: EventRouteOption[] = ((data ?? []) as unknown as Row[]).map((r) => ({
+          id: r.id,
+          route_id: r.route_id,
+          is_primary: r.is_primary,
+          display_order: r.display_order,
+          label: r.label,
+          title: r.routes?.title ?? '—',
+          distance_km: Number(r.routes?.distance_km ?? 0),
+          elevation_gain_m: r.routes?.elevation_gain_m ?? 0,
+          difficulty_label: r.routes?.difficulty_label ?? null,
+        }));
+        setEventRoutes(opts);
+      });
+    return () => { active = false; };
+  }, [id]);
 
   // Pre-fill emergency from profile (no profile.emergency_contact field; use phone as default)
   useEffect(() => {
@@ -116,6 +168,15 @@ export default function EventDetailPage() {
     // Pre-tick gear if user already RSVPd
     setGearConfirmed(new Set(event.required_gear));
     setLiabilityAck(false);
+    // Default route selection: existing rsvp's route → primary route → first route → null
+    if (myRsvp?.selected_route_id && eventRoutes.some((r) => r.route_id === myRsvp.selected_route_id)) {
+      setSelectedRouteId(myRsvp.selected_route_id);
+    } else if (eventRoutes.length > 0) {
+      const primary = eventRoutes.find((r) => r.is_primary);
+      setSelectedRouteId(primary?.route_id ?? eventRoutes[0].route_id);
+    } else {
+      setSelectedRouteId(null);
+    }
     setShowRsvpModal(true);
   };
 
@@ -131,10 +192,7 @@ export default function EventDetailPage() {
     }
 
     setSubmitting(true);
-    type RpcFn = (name: string, params: Record<string, unknown>) => Promise<{ data: unknown; error: { message: string; code?: string } | null }>;
-    const rpc = supabase.rpc as unknown as RpcFn;
-
-    const { error } = await rpc('rsvp_event', {
+    const rpcArgs = {
       p_event_id: event.id,
       p_guest_count: guestCount,
       p_emergency_name: emergencyName.trim(),
@@ -142,10 +200,14 @@ export default function EventDetailPage() {
       p_liability_ack: true,
       p_gear_confirmed: true,
       p_notes: rsvpNotes.trim() || null,
-    });
+      p_selected_route_id: eventRoutes.length > 0 ? selectedRouteId : null,
+    };
+    console.log('[rsvp_event] args:', rpcArgs);
+    const result = await supabase.rpc('rsvp_event' as never, rpcArgs as never);
+    console.log('[rsvp_event] result:', result);
 
-    if (error) {
-      toast.error(error.message || 'RSVP алдаа гарлаа');
+    if (result.error) {
+      toast.error(result.error.message || 'RSVP алдаа гарлаа');
     } else {
       toast.success('Бүртгэл амжилттай!');
       setShowRsvpModal(false);
@@ -156,9 +218,9 @@ export default function EventDetailPage() {
 
   const cancelRsvp = async () => {
     if (!event || !confirm('Та бүртгэлээ цуцлахдаа итгэлтэй байна уу?')) return;
-    type RpcFn = (name: string, params: Record<string, unknown>) => Promise<{ error: { message: string } | null }>;
-    const rpc = supabase.rpc as unknown as RpcFn;
-    const { error } = await rpc('cancel_rsvp', { p_event_id: event.id, p_reason: null });
+    const { error } = await supabase.rpc('cancel_rsvp' as never, {
+      p_event_id: event.id, p_reason: null,
+    } as never);
     if (error) toast.error(error.message);
     else { toast.success('Цуцлагдлаа'); refreshRsvps(); }
   };
@@ -238,7 +300,53 @@ export default function EventDetailPage() {
             </div>
           )}
 
-          {/* Distance + elevation + surface */}
+          {/* Route options (P1-5: shows options when event has linked routes) */}
+          {eventRoutes.length > 0 && (
+            <div className="bg-white border border-gray-100 rounded-xl p-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                {eventRoutes.length === 1 ? 'Маршрут' : `Маршрут (${eventRoutes.length} сонголт)`}
+              </h2>
+              <div className="space-y-2">
+                {eventRoutes.map((r) => (
+                  <Link
+                    key={r.id}
+                    to={`/routes/${r.route_id}`}
+                    className="flex items-center gap-3 p-3 bg-gray-50 hover:bg-primary-50/50 border border-gray-100 rounded-lg transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-gray-900 truncate">{r.title}</span>
+                        {r.label && (
+                          <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded">
+                            {r.label}
+                          </span>
+                        )}
+                        {r.is_primary && eventRoutes.length > 1 && (
+                          <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 text-[10px] font-medium rounded">
+                            Үндсэн
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                        <span>{r.distance_km.toFixed(1)} км</span>
+                        <span>{r.elevation_gain_m} м</span>
+                        {r.difficulty_label && <span className="capitalize">{r.difficulty_label}</span>}
+                      </div>
+                    </div>
+                    <span className="text-xs text-primary-600 font-medium">Үзэх →</span>
+                  </Link>
+                ))}
+              </div>
+              {eventRoutes.length > 1 && (
+                <p className="text-xs text-gray-400 mt-3">
+                  RSVP хийхдээ аль маршрутаар явахаа сонгож болно.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Distance + elevation + surface — fallback when no routes linked */}
+          {eventRoutes.length === 0 && (
           <div className="bg-white border border-gray-100 rounded-xl p-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Маршрут</h2>
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -267,6 +375,7 @@ export default function EventDetailPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* Required gear */}
           {event.required_gear.length > 0 && (
@@ -367,6 +476,56 @@ export default function EventDetailPage() {
             <p className="text-sm text-gray-500 mb-5">{event.title}</p>
 
             <div className="space-y-4">
+              {/* Route picker (only if event has 2+ routes) */}
+              {eventRoutes.length >= 2 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Маршрут сонгох
+                  </label>
+                  <div className="space-y-2">
+                    {eventRoutes.map((r) => (
+                      <label
+                        key={r.id}
+                        className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-colors ${
+                          selectedRouteId === r.route_id
+                            ? 'border-primary-500 bg-primary-50/50'
+                            : 'border-gray-200 hover:border-gray-300 bg-white'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="event-route"
+                          value={r.route_id}
+                          checked={selectedRouteId === r.route_id}
+                          onChange={() => setSelectedRouteId(r.route_id)}
+                          className="w-4 h-4 text-primary-600"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-gray-900 truncate">{r.title}</span>
+                            {r.label && (
+                              <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-medium rounded">
+                                {r.label}
+                              </span>
+                            )}
+                            {r.is_primary && (
+                              <span className="px-1.5 py-0.5 bg-primary-100 text-primary-700 text-[10px] font-medium rounded">
+                                Үндсэн
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 text-xs text-gray-500 mt-0.5">
+                            <span>{r.distance_km.toFixed(1)} км</span>
+                            <span>{r.elevation_gain_m} м</span>
+                            {r.difficulty_label && <span>{r.difficulty_label}</span>}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Gear checklist */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Шаардагдах хэрэгсэл (бүгдийг чагтлана)</label>

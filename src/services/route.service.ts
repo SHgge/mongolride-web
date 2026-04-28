@@ -16,6 +16,6 @@ export const routeService = {
     return supabase.from('routes').update(data).eq('id', id);
   },
   async getFeaturedRoutes() {
-    return supabase.from('routes').select('*').eq('status', 'approved').order('avg_rating', { ascending: false }).limit(6);
+    return supabase.from('routes').select('*').eq('status', 'published').order('completion_count', { ascending: false }).limit(6);
   },
 };

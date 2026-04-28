@@ -37,14 +37,10 @@ export default function EventManagement({ onEdit }: EventManagementProps) {
 
   const updateStatus = async (id: string, status: EventStatus) => {
     // Use status-transition RPC to enforce guard rules
-    const rpcFn = (supabase.rpc as unknown) as (
-      fn: string,
-      args: Record<string, unknown>,
-    ) => Promise<{ error: { message: string } | null }>;
-    const { error } = await rpcFn('change_event_status', {
+    const { error } = await supabase.rpc('change_event_status' as never, {
       p_event_id: id,
       p_new_status: status,
-    });
+    } as never);
     if (error) {
       toast.error(error.message ?? 'Төлөв солиход алдаа гарлаа');
     } else {

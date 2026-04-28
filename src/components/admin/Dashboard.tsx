@@ -21,7 +21,7 @@ export default function Dashboard() {
     Promise.all([
       supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('is_active', true),
       supabase.from('routes').select('*', { count: 'exact', head: true }),
-      supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'pending'),
+      supabase.from('routes').select('*', { count: 'exact', head: true }).eq('status', 'draft'),
       supabase.from('events').select('*', { count: 'exact', head: true }),
       supabase.from('events').select('*', { count: 'exact', head: true }).eq('status', 'published'),
       supabase.from('listings').select('*', { count: 'exact', head: true }).eq('status', 'active'),
