@@ -47,17 +47,31 @@ Deno.serve(async (req) => {
   const { data: rsvps } = await admin.from('event_rsvps')
     .select('id, user_id').eq('event_id', event_id).in('status', ['confirmed', 'waitlist', 'pending_payment']);
 
+  const APP_URL = Deno.env.get('APP_URL') ?? Deno.env.get('PUBLIC_SITE_URL') ?? 'https://ubriders-club.vercel.app';
+
   for (const rsvp of rsvps ?? []) {
     await admin.from('event_rsvps')
       .update({ status: 'cancelled', cancellation_reason: reason ?? 'Event cancelled by admin', updated_at: new Date().toISOString() })
       .eq('id', rsvp.id);
-    await admin.from('notifications').insert({
-      user_id: rsvp.user_id,
-      type: 'event.cancelled',
-      title: `Эвент цуцлагдлаа: ${event.title}`,
-      message: reason ?? 'Зохион байгуулагч эвентийг цуцалсан байна.',
-      link: `/events/${event_id}`,
-    });
+
+    // EP-06: dispatcher fans email + in_app per user prefs
+    await admin.rpc('dispatch_notification' as never, {
+      p_template_key: 'event.cancelled',
+      p_recipient_user_id: rsvp.user_id,
+      p_variables: {
+        event_title: event.title,
+        reason: reason ?? '',
+        events_url: `${APP_URL}/events`,
+        link: `/events/${event_id}`,
+      },
+      p_severity: 'normal',
+      p_bypass_dnd: false,
+      p_idempotency_key: `event.cancelled:${event_id}:${rsvp.user_id}`,
+      p_source_epic: 'EP-03',
+      p_source_event: 'event.cancelled',
+      p_source_target_id: event_id,
+      p_force_channels: null,
+    } as never);
   }
 
   return new Response(JSON.stringify({ ok: true, cancelled_rsvps: rsvps?.length ?? 0 }), {

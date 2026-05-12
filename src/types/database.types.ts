@@ -30,6 +30,88 @@ export interface ElevationPoint {
   ele: number;
 }
 
+// EP-06 notification types
+export type NotificationCategory =
+  | 'transactional' | 'event_lifecycle' | 'weather' | 'social' | 'marketing' | 'system';
+export type NotificationChannel = 'email' | 'in_app' | 'web_push';
+export type NotificationLocale = 'mn' | 'en';
+export type NotificationOutboxStatus =
+  | 'queued' | 'scheduled' | 'sending' | 'sent' | 'failed' | 'dead' | 'suppressed';
+
+export interface NotificationTemplateVariable {
+  name: string;
+  type: 'string' | 'number' | 'url' | 'date' | 'boolean';
+  required?: boolean;
+  example?: string | number | boolean;
+}
+
+export interface NotificationMatrix {
+  transactional?:   { email?: boolean; in_app?: boolean; web_push?: boolean };
+  event_lifecycle?: { email?: boolean; in_app?: boolean; web_push?: boolean };
+  weather?:         { email?: boolean; in_app?: boolean; web_push?: boolean };
+  social?:          { email?: boolean; in_app?: boolean; web_push?: boolean };
+  marketing?:       { email?: boolean; in_app?: boolean; web_push?: boolean };
+  system?:          { email?: boolean; in_app?: boolean; web_push?: boolean };
+}
+
+// EP-05 weather types
+export type WeatherProvider = 'open-meteo' | 'iqair' | 'aqicn' | 'cached';
+export type WeatherRiskLevel = 'green' | 'yellow' | 'orange' | 'red' | 'black';
+export type WeatherAlertType =
+  | 'cold' | 'heat' | 'wind' | 'aqi' | 'dust'
+  | 'rain' | 'snow' | 'thunderstorm' | 'uv' | 'reroute_suggested';
+export type WeatherAlertSeverity =
+  | 'info' | 'warning' | 'severe' | 'hazardous' | 'cancel_recommended';
+export type WeatherForecastWindow =
+  | 't_minus_72h' | 't_minus_24h' | 't_minus_6h' | 't_minus_2h' | 'live';
+
+export interface WeatherSnapshot {
+  id?: string;
+  lat_grid: number;
+  lng_grid: number;
+  hour_bucket: string;
+  provider: WeatherProvider;
+  fetched_at: string;
+  is_stale: boolean;
+  temp_c: number | null;
+  feels_like_c: number | null;
+  wind_speed_ms: number | null;
+  wind_dir_deg: number | null;
+  wind_gust_ms: number | null;
+  precip_prob_pct: number | null;
+  precip_amount_mm: number | null;
+  humidity_pct: number | null;
+  pressure_hpa: number | null;
+  cloud_cover_pct: number | null;
+  visibility_km: number | null;
+  aqi_us: number | null;
+  pm25_ugm3: number | null;
+  pm10_ugm3: number | null;
+  o3_ugm3: number | null;
+  no2_ugm3: number | null;
+  uv_index: number | null;
+  thunderstorm_prob_pct: number | null;
+  sunrise_at: string | null;
+  sunset_at: string | null;
+  cache_hit?: boolean;
+}
+
+export interface WeatherRiskComponents {
+  cold?: WeatherRiskLevel;
+  heat?: WeatherRiskLevel;
+  wind?: WeatherRiskLevel;
+  aqi?: WeatherRiskLevel;
+  dust?: WeatherRiskLevel;
+  precip?: WeatherRiskLevel;
+  thunderstorm?: WeatherRiskLevel;
+  uv?: WeatherRiskLevel;
+}
+
+export interface WeatherRisk {
+  overall: WeatherRiskLevel;
+  components: WeatherRiskComponents;
+}
+
 export type CueType =
   | 'start'
   | 'end'
@@ -260,6 +342,175 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['event_routes']['Insert']>;
         Relationships: [];
       };
+      weather_snapshots: {
+        Row: {
+          id: string;
+          lat_grid: number;
+          lng_grid: number;
+          hour_bucket: string;
+          provider: WeatherProvider;
+          fetched_at: string;
+          is_stale: boolean;
+          temp_c: number | null;
+          feels_like_c: number | null;
+          wind_speed_ms: number | null;
+          wind_dir_deg: number | null;
+          wind_gust_ms: number | null;
+          precip_prob_pct: number | null;
+          precip_amount_mm: number | null;
+          humidity_pct: number | null;
+          pressure_hpa: number | null;
+          cloud_cover_pct: number | null;
+          visibility_km: number | null;
+          aqi_us: number | null;
+          pm25_ugm3: number | null;
+          pm10_ugm3: number | null;
+          o3_ugm3: number | null;
+          no2_ugm3: number | null;
+          uv_index: number | null;
+          thunderstorm_prob_pct: number | null;
+          sunrise_at: string | null;
+          sunset_at: string | null;
+          raw_payload: Json | null;
+        };
+        Insert: Partial<Database['public']['Tables']['weather_snapshots']['Row']> & {
+          lat_grid: number;
+          lng_grid: number;
+          hour_bucket: string;
+          provider: WeatherProvider;
+        };
+        Update: Partial<Database['public']['Tables']['weather_snapshots']['Row']>;
+        Relationships: [];
+      };
+      event_alerts: {
+        Row: {
+          id: string;
+          event_id: string;
+          alert_type: WeatherAlertType;
+          severity: WeatherAlertSeverity;
+          triggered_at: string;
+          forecast_window: WeatherForecastWindow;
+          values_snapshot: Record<string, number | null>;
+          acknowledged_at: string | null;
+          acknowledged_by: string | null;
+          acknowledgment_note: string | null;
+          resolved_at: string | null;
+        };
+        Insert: {
+          event_id: string;
+          alert_type: WeatherAlertType;
+          severity: WeatherAlertSeverity;
+          forecast_window: WeatherForecastWindow;
+          values_snapshot: Record<string, number | null>;
+        };
+        Update: {
+          acknowledged_at?: string | null;
+          acknowledged_by?: string | null;
+          acknowledgment_note?: string | null;
+          resolved_at?: string | null;
+        };
+        Relationships: [];
+      };
+      profile_weather_prefs: {
+        Row: {
+          user_id: string;
+          notifications_enabled: boolean;
+          cold_threshold_c: number;
+          wind_threshold_ms: number;
+          aqi_threshold: number;
+          notify_on_yellow: boolean;
+          notify_on_orange: boolean;
+          notify_on_red: boolean;
+          notify_on_black: boolean;
+          preferred_notification_channels: string[];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: { user_id: string } & Partial<Database['public']['Tables']['profile_weather_prefs']['Row']>;
+        Update: Partial<Database['public']['Tables']['profile_weather_prefs']['Row']>;
+        Relationships: [];
+      };
+      notification_templates: {
+        Row: {
+          id: string;
+          key: string;
+          locale: NotificationLocale;
+          channel: NotificationChannel;
+          category: NotificationCategory;
+          version: number;
+          is_active: boolean;
+          subject_md: string | null;
+          body_md: string;
+          plaintext_md: string | null;
+          variables: NotificationTemplateVariable[];
+          description: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          locale: NotificationLocale;
+          channel: NotificationChannel;
+          category: NotificationCategory;
+          body_md: string;
+          version?: number;
+          is_active?: boolean;
+          subject_md?: string | null;
+          plaintext_md?: string | null;
+          variables?: NotificationTemplateVariable[];
+          description?: string | null;
+          created_by?: string | null;
+        };
+        Update: Partial<Database['public']['Tables']['notification_templates']['Insert']>;
+        Relationships: [];
+      };
+      notification_outbox: {
+        Row: {
+          id: string;
+          idempotency_key: string;
+          template_key: string;
+          category: NotificationCategory;
+          channel: NotificationChannel;
+          recipient_user_id: string | null;
+          recipient_email: string | null;
+          recipient_locale: NotificationLocale;
+          variables: Record<string, unknown>;
+          severity: 'normal' | 'high' | 'severe';
+          bypass_dnd: boolean;
+          status: NotificationOutboxStatus;
+          scheduled_for: string;
+          attempted_at: string | null;
+          sent_at: string | null;
+          retry_count: number;
+          last_error: string | null;
+          provider_message_id: string | null;
+          source_epic: string | null;
+          source_event: string | null;
+          source_target_id: string | null;
+          created_at: string;
+        };
+        Insert: never; // service-role only
+        Update: never;
+        Relationships: [];
+      };
+      notification_preferences: {
+        Row: {
+          user_id: string;
+          preferred_locale: NotificationLocale;
+          timezone: string;
+          quiet_hours_start: string | null;
+          quiet_hours_end: string | null;
+          allow_severe_during_dnd: boolean;
+          paused_until: string | null;
+          matrix: NotificationMatrix;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: { user_id: string } & Partial<Database['public']['Tables']['notification_preferences']['Row']>;
+        Update: Partial<Database['public']['Tables']['notification_preferences']['Row']>;
+        Relationships: [];
+      };
       events: {
         Row: {
           id: string;
@@ -365,6 +616,12 @@ export interface Database {
           cancelled_at: string | null;
           cancellation_reason: string | null;
           checked_in_at: string | null;
+          checked_in_method: 'qr' | 'manual' | 'self' | 'wallet' | null;
+          checked_in_by: string | null;
+          checked_in_late: boolean | null;
+          checked_in_override: boolean;
+          checked_in_lat: number | null;
+          checked_in_lng: number | null;
           check_in_token: string;
           selected_route_id: string | null;
           created_at: string;

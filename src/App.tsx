@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from './contexts/AuthContext';
 import { NotificationProvider } from './contexts/NotificationContext';
 import { ThemeProvider } from './contexts/ThemeContext';
@@ -23,6 +24,18 @@ import MarketplacePage from './pages/MarketplacePage';
 import ListingDetailPage from './pages/ListingDetailPage';
 import AddListingPage from './pages/AddListingPage';
 import ProfilePage from './pages/ProfilePage';
+import WeatherPreferencesPage from './pages/profile/WeatherPreferencesPage';
+import TicketPage from './pages/TicketPage';
+import CheckInTokenPage from './pages/CheckInTokenPage';
+import ScannerPage from './pages/ScannerPage';
+import RosterPage from './pages/RosterPage';
+import NotificationsFeedPage from './pages/NotificationsFeedPage';
+import NotificationPreferencesPage from './pages/profile/NotificationPreferencesPage';
+import UnsubscribePage from './pages/UnsubscribePage';
+import TemplatesListPage from './pages/admin/notifications/TemplatesListPage';
+import TemplateEditorPage from './pages/admin/notifications/TemplateEditorPage';
+import AdminAnalyticsDashboardPage from './pages/AdminAnalyticsDashboardPage';
+import OrganizerDashboardPage from './pages/OrganizerDashboardPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import NewsPage from './pages/NewsPage';
 import NewsDetailPage from './pages/NewsDetailPage';
@@ -36,10 +49,24 @@ import AdminSettingsPage from './pages/AdminSettingsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import UnauthorizedPage from './pages/UnauthorizedPage';
 
+// EP-07: TanStack Query for analytics dashboard caching.
+// 60s staleTime is the right fit for materialized-view-backed reads (15-min refresh).
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
 export default function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
+        <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <NotificationProvider>
             <Routes>
@@ -65,6 +92,17 @@ export default function App() {
                   <Route path="/routes/new" element={<AddRoutePage />} />
                   <Route path="/marketplace/new" element={<AddListingPage />} />
                   <Route path="/profile" element={<ProfilePage />} />
+                  <Route path="/profile/weather" element={<WeatherPreferencesPage />} />
+                  <Route path="/profile/notifications" element={<NotificationPreferencesPage />} />
+                  <Route path="/notifications" element={<NotificationsFeedPage />} />
+                  <Route path="/unsubscribe" element={<UnsubscribePage />} />
+                  <Route path="/events/:id/ticket" element={<TicketPage />} />
+                  <Route path="/check-in/:token" element={<CheckInTokenPage />} />
+                  {/* EP-09 scanner/roster: auth required; page itself authorises
+                      admin / organizer / co-organizer / sweep_rider */}
+                  <Route path="/admin/events/:eventId/scanner" element={<ScannerPage />} />
+                  <Route path="/admin/events/:eventId/roster" element={<RosterPage />} />
+                  <Route path="/organizer/dashboard" element={<OrganizerDashboardPage />} />
                 </Route>
 
                 <Route path="*" element={<NotFoundPage />} />
@@ -79,6 +117,9 @@ export default function App() {
                   <Route path="/admin/marketplace" element={<AdminMarketPage />} />
                   <Route path="/admin/news" element={<AdminNewsPage />} />
                   <Route path="/admin/settings" element={<AdminSettingsPage />} />
+                  <Route path="/admin/notifications/templates" element={<TemplatesListPage />} />
+                  <Route path="/admin/notifications/templates/:id" element={<TemplateEditorPage />} />
+                  <Route path="/admin/dashboard" element={<AdminAnalyticsDashboardPage />} />
                 </Route>
               </Route>
             </Routes>
@@ -94,6 +135,7 @@ export default function App() {
             />
           </NotificationProvider>
         </AuthProvider>
+        </QueryClientProvider>
       </ThemeProvider>
     </BrowserRouter>
   );

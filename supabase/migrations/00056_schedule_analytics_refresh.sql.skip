@@ -1,0 +1,12 @@
+-- ============================================================
+-- EP-07 P0-2 cron schedule (pg_cron — Pro plan required)
+--
+-- Apply manually after Pro upgrade by renaming this file to .sql
+-- and running `npx supabase db push`.
+-- ============================================================
+
+select cron.schedule(
+  'refresh-analytics',
+  '*/15 * * * *',
+  $$ select public.refresh_analytics_views(); $$
+);

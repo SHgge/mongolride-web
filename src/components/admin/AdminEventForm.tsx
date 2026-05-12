@@ -8,6 +8,8 @@ import { ImageUpload } from '../common';
 import { logAudit } from '../../lib/audit';
 import { diffKeys, shouldNotifyParticipants } from '../../lib/eventDiff';
 import EventRoutesEditor from './EventRoutesEditor';
+import WeatherPanel from '../weather/WeatherPanel';
+import RerouteSuggestionModal from '../weather/RerouteSuggestionModal';
 
 const DISCIPLINES = [
   { value: 'road', label: 'Зам' },
@@ -80,6 +82,8 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
   const [rollOutAt, setRollOutAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const [meetLocation, setMeetLocation] = useState('');
+  const [meetLat, setMeetLat] = useState<string>('');
+  const [meetLng, setMeetLng] = useState<string>('');
   const [distanceKm, setDistanceKm] = useState('');
   const [elevationM, setElevationM] = useState('');
   const [paceMin, setPaceMin] = useState('');
@@ -108,6 +112,9 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [showRerouteModal, setShowRerouteModal] = useState(false);
+  const [hasAqiAlert, setHasAqiAlert] = useState(false);
+  const [currentRouteId, setCurrentRouteId] = useState<string | null>(null);
 
   // Load existing event for edit mode
   useEffect(() => {
@@ -134,6 +141,9 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
       setRollOutAt(isoToLocalInput(e.roll_out_at as string | null));
       setEndAt(isoToLocalInput(e.end_at as string | null));
       setMeetLocation((e.meet_location_name as string) ?? '');
+      setMeetLat(e.meet_lat != null ? String(e.meet_lat) : '');
+      setMeetLng(e.meet_lng != null ? String(e.meet_lng) : '');
+      setCurrentRouteId((e.route_id as string | null) ?? null);
       setDistanceKm(e.distance_km != null ? String(e.distance_km) : '');
       setElevationM(e.elevation_gain_m != null ? String(e.elevation_gain_m) : '');
       setPaceMin(e.pace_min_kmh != null ? String(e.pace_min_kmh) : '');
@@ -158,6 +168,24 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
     return () => { active = false; };
   }, [eventId]);
 
+  // EP-05 P1-4: detect unresolved AQI alerts to surface reroute prompt
+  useEffect(() => {
+    if (!eventId) return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from('event_alerts')
+        .select('id')
+        .eq('event_id', eventId)
+        .eq('alert_type', 'aqi')
+        .in('severity', ['severe', 'hazardous'])
+        .is('resolved_at', null)
+        .limit(1);
+      if (active) setHasAqiAlert((data ?? []).length > 0);
+    })();
+    return () => { active = false; };
+  }, [eventId]);
+
   const toggleGear = (g: string) => {
     const next = new Set(requiredGear);
     if (next.has(g)) next.delete(g); else next.add(g);
@@ -174,6 +202,8 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
     roll_out_at: new Date(rollOutAt).toISOString(),
     end_at: endAt ? new Date(endAt).toISOString() : null,
     meet_location_name: meetLocation.trim(),
+    meet_lat: meetLat ? Number(meetLat) : null,
+    meet_lng: meetLng ? Number(meetLng) : null,
     distance_km: distanceKm ? Number(distanceKm) : null,
     elevation_gain_m: elevationM ? Number(elevationM) : null,
     pace_min_kmh: paceMin ? Number(paceMin) : null,
@@ -455,6 +485,54 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
                 placeholder="Зайсан толгой"
                 className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm" />
             </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Өргөрөг (lat) <span className="text-gray-400">— цаг агаарын мэдээлэлд хэрэгтэй</span>
+                </label>
+                <input
+                  type="number" step="any" placeholder="47.92"
+                  value={meetLat} onChange={(e) => setMeetLat(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">Уртраг (lng)</label>
+                <input
+                  type="number" step="any" placeholder="106.92"
+                  value={meetLng} onChange={(e) => setMeetLng(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-sm"
+                />
+              </div>
+            </div>
+          </fieldset>
+
+          {/* Weather forecast (EP-05) */}
+          <fieldset className="space-y-3">
+            <legend className="text-sm font-semibold text-gray-900 mb-2">Цаг агаар</legend>
+            {hasAqiAlert && eventId && (
+              <button
+                type="button"
+                onClick={() => setShowRerouteModal(true)}
+                className="w-full flex items-center justify-between gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl text-left hover:bg-orange-100 transition-colors"
+              >
+                <div>
+                  <div className="text-sm font-medium text-orange-900">
+                    AQI өндөр — маршрут солих санал харах
+                  </div>
+                  <div className="text-xs text-orange-700/80 mt-0.5">
+                    Ойролцоо илүү цэвэр агаартай газар байгаа эсэхийг шалгах
+                  </div>
+                </div>
+                <span className="text-orange-600 text-xs font-semibold">Үзэх →</span>
+              </button>
+            )}
+            <WeatherPanel
+              lat={meetLat ? Number(meetLat) : null}
+              lng={meetLng ? Number(meetLng) : null}
+              atIso={meetAt ? new Date(meetAt).toISOString() : null}
+              isAdmin
+            />
           </fieldset>
 
           {/* Ride character */}
@@ -632,6 +710,19 @@ export default function AdminEventForm({ eventId, onCancel, onSaved }: AdminEven
           </div>
         </form>
       </div>
+
+      {/* Reroute modal (EP-05 P1-4) */}
+      {showRerouteModal && eventId && (
+        <RerouteSuggestionModal
+          eventId={eventId}
+          currentRouteId={currentRouteId}
+          onClose={() => setShowRerouteModal(false)}
+          onApplied={(newId) => {
+            setCurrentRouteId(newId);
+            setShowRerouteModal(false);
+          }}
+        />
+      )}
 
       {/* Cancel modal */}
       {showCancelModal && (

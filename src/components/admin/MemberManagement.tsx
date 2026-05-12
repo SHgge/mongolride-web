@@ -6,6 +6,7 @@ import type { Tables, UserRole } from '../../types/database.types';
 import { RANK_LABELS, RANK_COLORS, type UserRank } from '../../types/user.types';
 import { useAuth } from '../../hooks/useAuth';
 import { logAudit, AuditActions } from '../../lib/audit';
+import ReliabilityChip from './ReliabilityChip';
 
 type Profile = Tables<'profiles'>;
 
@@ -235,9 +236,10 @@ export default function MemberManagement() {
                             )}
                           </div>
                           <div>
-                            <div className="font-medium text-gray-900">
-                              {member.full_name}
-                              {isSelf && <span className="ml-2 text-xs text-primary-600">(Та)</span>}
+                            <div className="font-medium text-gray-900 flex items-center gap-2 flex-wrap">
+                              <span>{member.full_name}</span>
+                              {isSelf && <span className="text-xs text-primary-600">(Та)</span>}
+                              <ReliabilityChip userId={member.id} compact />
                             </div>
                             {member.phone && <div className="text-xs text-gray-400">{member.phone}</div>}
                           </div>

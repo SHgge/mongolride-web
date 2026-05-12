@@ -9,6 +9,10 @@ import { supabase, supabasePublic } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import type { Tables, RouteDifficultyLabel } from '../types/database.types';
 import { Loader } from '../components/common';
+import WeatherPanel from '../components/weather/WeatherPanel';
+import { useWeatherSnapshot } from '../hooks/useWeatherSnapshot';
+import { useAugmentedGear } from '../hooks/useAugmentedGear';
+import ExportAttendanceModal from '../components/admin/ExportAttendanceModal';
 
 type Event = Tables<'events'>;
 type Rsvp = Tables<'event_rsvps'>;
@@ -78,6 +82,9 @@ export default function EventDetailPage() {
   // Multi-route picker (P1-5)
   const [eventRoutes, setEventRoutes] = useState<EventRouteOption[]>([]);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(null);
+
+  // EP-09: export modal state
+  const [showExportModal, setShowExportModal] = useState(false);
 
   // Fetch event
   useEffect(() => {
@@ -150,6 +157,39 @@ export default function EventDetailPage() {
       setEmergencyPhone(profile.phone ?? '');
     }
   }, [profile, emergencyPhone]);
+
+  // EP-05: weather snapshot + augmented gear list
+  const weather = useWeatherSnapshot({
+    lat: event?.meet_lat ?? null,
+    lng: event?.meet_lng ?? null,
+    atIso: event?.meet_at ?? null,
+    enabled: !!event && event.meet_lat != null && event.meet_lng != null,
+  });
+  const augmentedGear = useAugmentedGear({
+    baseRequiredGear: event?.required_gear ?? [],
+    snapshot: weather.snapshot,
+    risk: weather.risk,
+  });
+  const overallRisk = weather.risk?.overall ?? 'green';
+  const rsvpBlocked = overallRisk === 'black';
+
+  // EP-05 P1-6: realtime alerts on this event
+  useEffect(() => {
+    if (!id) return;
+    const ch = supabase
+      .channel(`event-alerts:${id}`)
+      .on('postgres_changes', {
+        event: 'INSERT', schema: 'public', table: 'event_alerts',
+        filter: `event_id=eq.${id}`,
+      }, ({ new: row }) => {
+        const r = row as { alert_type: string; severity: string };
+        toast.error(`Цаг агаарын анхаарал: ${r.alert_type} (${r.severity})`);
+        weather.refresh();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
 
   // Realtime capacity
   useEffect(() => {
@@ -244,6 +284,16 @@ export default function EventDetailPage() {
   const coverUrl = event.cover_photo_path
     ? supabasePublic.storage.from('event-assets').getPublicUrl(event.cover_photo_path).data.publicUrl
     : null;
+  // EP-09: scanner / roster / export toolbar — visible to organisers and admins
+  const canScan = !!user && (
+    profile?.role === 'admin'
+    || event.organizer_id === user.id
+    || (event.co_organizer_ids ?? []).includes(user.id)
+    || event.sweep_rider_id === user.id
+  );
+  // Member: link to their personal ticket page if they have an active RSVP
+  const showTicketLink = !!myRsvp
+    && (myRsvp.status === 'confirmed' || myRsvp.status === 'pending_payment' || myRsvp.status === 'attended');
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8">
@@ -262,6 +312,13 @@ export default function EventDetailPage() {
           <h1 className="text-3xl md:text-4xl font-bold mb-2">{event.title}</h1>
         </div>
       </div>
+
+      {/* EP-05: Weather forecast panel */}
+      {event.meet_lat != null && event.meet_lng != null && (
+        <div className="mb-6">
+          <WeatherPanel lat={event.meet_lat} lng={event.meet_lng} atIso={event.meet_at} />
+        </div>
+      )}
 
       {/* Meta strip */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -288,6 +345,47 @@ export default function EventDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* EP-09 toolbar (visible to organisers/admins + members with a ticket) */}
+      {(canScan || showTicketLink) && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          {showTicketLink && (
+            <Link
+              to={`/events/${event.id}/ticket`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 bg-primary-50 text-primary-700 text-sm font-medium rounded-lg hover:bg-primary-100"
+            >
+              <UserPlus className="w-4 h-4" /> Миний ticket / QR
+            </Link>
+          )}
+          {canScan && (
+            <>
+              <Link
+                to={`/admin/events/${event.id}/scanner`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800"
+              >
+                Scanner нээх
+              </Link>
+              <Link
+                to={`/admin/events/${event.id}/roster`}
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Roster (хэвлэх)
+              </Link>
+              <button
+                onClick={() => setShowExportModal(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 border border-gray-200 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50"
+              >
+                Оролцоо CSV
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* EP-09 P1-5: post-event summary (after meet_at, organiser/admin only) */}
+      {canScan && new Date() > eventDate && (
+        <PostEventSummary eventId={event.id} confirmedCount={confirmedCount} />
+      )}
 
       <div className="grid md:grid-cols-3 gap-6">
         {/* Left: Info */}
@@ -378,15 +476,56 @@ export default function EventDetailPage() {
           )}
 
           {/* Required gear */}
-          {event.required_gear.length > 0 && (
+          {(event.required_gear.length > 0 || augmentedGear.length > 0) && (
             <div className="bg-white border border-gray-100 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-3">Шаардагдах хэрэгсэл</h2>
               <div className="grid grid-cols-2 gap-2">
-                {event.required_gear.map((g) => (
-                  <div key={g} className="flex items-center gap-2 text-sm text-gray-700">
-                    <CheckCircle2 className="w-4 h-4 text-primary-600" /> {GEAR_LABELS[g] ?? g}
+                {augmentedGear.map((g) => (
+                  <div
+                    key={g.value}
+                    className={`flex items-start gap-2 text-sm ${
+                      g.weatherAdded ? 'text-amber-700' : 'text-gray-700'
+                    }`}
+                    title={g.reason ?? undefined}
+                  >
+                    <CheckCircle2 className={`w-4 h-4 mt-0.5 flex-shrink-0 ${
+                      g.weatherAdded ? 'text-amber-500' : 'text-primary-600'
+                    }`} />
+                    <span>
+                      {g.label}
+                      {g.weatherAdded && (
+                        <span className="ml-1 text-[10px] uppercase tracking-wide text-amber-600">
+                          (цаг агаараас)
+                        </span>
+                      )}
+                    </span>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* EP-05: weather risk banner above RSVP */}
+          {(overallRisk === 'orange' || overallRisk === 'red' || overallRisk === 'black') && (
+            <div className={`border rounded-xl p-4 ${
+              overallRisk === 'black' ? 'bg-gray-900 text-white border-gray-900'
+              : overallRisk === 'red' ? 'bg-red-50 text-red-900 border-red-200'
+              : 'bg-orange-50 text-orange-900 border-orange-200'
+            }`}>
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                <div className="text-sm">
+                  <p className="font-medium mb-1">
+                    {overallRisk === 'black'
+                      ? 'Цаг агаар маш аюултай байна — RSVP хаалттай'
+                      : 'Энэ эвентэд цаг агаарын эрсдэл байна'}
+                  </p>
+                  <p className={overallRisk === 'black' ? 'text-gray-200' : 'opacity-80'}>
+                    {overallRisk === 'black'
+                      ? 'Зохион байгуулагч цуцлах эсэхийг шийдэх хүртэл бүртгэл хүлээн авахгүй.'
+                      : 'Та шаардлагатай хэрэглэлтэйгээ нягтлан бүртгүүлнэ үү.'}
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -444,10 +583,20 @@ export default function EventDetailPage() {
                   </button>
                 </div>
               ) : (
-                <button onClick={openRsvpModal} disabled={isFull && event.capacity !== null && !event.allow_guests}
-                  className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50">
+                <button
+                  onClick={openRsvpModal}
+                  disabled={
+                    (isFull && event.capacity !== null && !event.allow_guests)
+                    || (rsvpBlocked && profile?.role !== 'admin')
+                  }
+                  title={rsvpBlocked && profile?.role !== 'admin'
+                    ? 'Зохион байгуулагч цуцлах эсэхийг шийдэх хүртэл RSVP хаалттай.'
+                    : undefined}
+                  className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white text-sm font-medium rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed">
                   <UserPlus className="w-4 h-4" />
-                  {isFull ? 'Хүлээгдэж бүртгүүлэх' : 'Бүртгүүлэх'}
+                  {rsvpBlocked && profile?.role !== 'admin'
+                    ? 'RSVP хаалттай (цаг агаар)'
+                    : isFull ? 'Хүлээгдэж бүртгүүлэх' : 'Бүртгүүлэх'}
                 </button>
               )
             )}
@@ -604,6 +753,78 @@ export default function EventDetailPage() {
           </div>
         </div>
       )}
+
+      {/* EP-09 export modal */}
+      {showExportModal && (
+        <ExportAttendanceModal
+          eventId={event.id}
+          eventTitle={event.title}
+          onClose={() => setShowExportModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ============================================================
+// EP-09 P1-5: post-event summary card
+// ============================================================
+
+interface PostEventSummaryProps {
+  eventId: string;
+  confirmedCount: number;
+}
+
+function PostEventSummary({ eventId }: PostEventSummaryProps) {
+  const [stats, setStats] = useState({
+    confirmed: 0, attended: 0, late: 0, on_time: 0, no_show: 0, cancelled: 0,
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!eventId) return;
+    let active = true;
+    (async () => {
+      const { data } = await supabase
+        .from('event_rsvps')
+        .select('status, checked_in_late')
+        .eq('event_id', eventId);
+      if (!active) return;
+      const rows = (data ?? []) as Array<{ status: string; checked_in_late: boolean | null }>;
+      const attended = rows.filter((r) => r.status === 'attended');
+      setStats({
+        confirmed: rows.filter((r) => r.status === 'confirmed').length,
+        attended: attended.length,
+        late: attended.filter((r) => r.checked_in_late).length,
+        on_time: attended.filter((r) => !r.checked_in_late).length,
+        no_show: rows.filter((r) => r.status === 'no_show').length,
+        cancelled: rows.filter((r) => r.status === 'cancelled').length,
+      });
+      setLoading(false);
+    })();
+    return () => { active = false; };
+  }, [eventId]);
+
+  if (loading) return null;
+
+  const tile = (label: string, value: number, color: string) => (
+    <div className="bg-white border border-gray-100 rounded-xl p-3">
+      <div className="text-[10px] uppercase tracking-wide text-gray-400 mb-0.5">{label}</div>
+      <div className={`text-2xl font-bold ${color}`}>{value}</div>
+    </div>
+  );
+
+  return (
+    <div className="mb-6">
+      <h2 className="text-sm font-semibold text-gray-700 mb-2">Эвентийн дараах хураангуй</h2>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        {tile('Confirmed (хуучин)', stats.confirmed, 'text-gray-700')}
+        {tile('Оролцсон',           stats.attended, 'text-green-600')}
+        {tile('Цагтаа',             stats.on_time,  'text-green-700')}
+        {tile('Хоцорсон',           stats.late,     'text-amber-600')}
+        {tile('Ирээгүй',            stats.no_show,  'text-red-600')}
+        {tile('Цуцалсан',           stats.cancelled,'text-gray-500')}
+      </div>
     </div>
   );
 }

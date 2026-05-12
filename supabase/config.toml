@@ -381,6 +381,29 @@ deno_version = 2
 [functions.download-clean-gpx]
 verify_jwt = false
 
+# refresh-weather-snapshots is invoked from pg_cron via service-role bearer.
+# notify-weather-alert is invoked internally from refresh-weather-snapshots
+# with the service-role key. Both bypass JWT verification.
+[functions.refresh-weather-snapshots]
+verify_jwt = false
+
+[functions.notify-weather-alert]
+verify_jwt = false
+
+# fetch-weather-snapshot returns public weather data; anonymous viewers
+# (event detail page) need it. The function still uses the user's auth
+# context if present (RLS-aware), and writes via service-role.
+[functions.fetch-weather-snapshot]
+verify_jwt = false
+
+# EP-06 dispatcher: outbox processor + Resend webhook are external
+# (cron / Resend) and don't carry JWTs.
+[functions.process-notification-outbox]
+verify_jwt = false
+
+[functions.resend-webhook]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

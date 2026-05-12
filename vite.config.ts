@@ -23,6 +23,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        // EP-09: html5-qrcode + leaflet + recharts push the main bundle past
+        // the 2 MiB default. Bump to 4 MiB so the SW precaches the full app.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/rest\/v1\/.*/i,

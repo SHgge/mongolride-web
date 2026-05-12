@@ -1,0 +1,26 @@
+-- ============================================================
+-- EP-06 P0-3 cron schedule (pg_cron — Pro plan required)
+--
+-- Apply manually after Pro upgrade:
+--   1. Enable pg_cron + pg_net in Dashboard → Database → Extensions
+--   2. alter database postgres set app.settings.service_role_key = '<key>';
+--   3. Rename this file to .sql and `npx supabase db push`
+--
+-- Schedule: every minute. process-notification-outbox is idempotent
+-- (race-safe lock-and-update on each row).
+-- ============================================================
+
+select cron.schedule(
+  'process-notification-outbox',
+  '* * * * *',
+  $$
+  select net.http_post(
+    url := 'https://ebpdvytkvmhpfcrhqypj.functions.supabase.co/process-notification-outbox',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
+      'Content-Type', 'application/json'
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);

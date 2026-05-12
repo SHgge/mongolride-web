@@ -1,0 +1,29 @@
+-- ============================================================
+-- EP-05 P0-4 cron schedule (pg_cron — Pro plan required)
+--
+-- Apply manually after upgrading to Supabase Pro:
+--
+--   1. Enable pg_cron + pg_net extensions in Dashboard → Database → Extensions
+--   2. Set the service-role key in postgres settings:
+--        alter database postgres set app.settings.service_role_key
+--          = '<service_role_key_value>';
+--   3. Run this file via SQL Editor (or rename to .sql and `db push`).
+--
+-- Free tier note: skipped during normal `db push` because of the .skip
+-- extension; rename to .sql when ready.
+-- ============================================================
+
+select cron.schedule(
+  'refresh-weather-snapshots',
+  '*/30 * * * *',
+  $$
+  select net.http_post(
+    url := 'https://ebpdvytkvmhpfcrhqypj.functions.supabase.co/refresh-weather-snapshots',
+    headers := jsonb_build_object(
+      'Authorization', 'Bearer ' || current_setting('app.settings.service_role_key'),
+      'Content-Type', 'application/json'
+    ),
+    body := '{}'::jsonb
+  );
+  $$
+);
